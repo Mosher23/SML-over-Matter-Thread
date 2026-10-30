@@ -32,6 +32,17 @@ PIN transmission, also connect **XIAO GPIO16 (D6/TX) → head RX**. A head
 powered from the XIAO's 5 V pin must still have a **3.3 V-safe UART output**.
 See [wiring details](firmware/README.md#hardware).
 
+## 🧲 3D-printable magnetic case
+
+Download the [magnetic case on Printables](https://www.printables.com/model/1895951-magnetic-case-for-sml-over-matterthread-ir-meter-r)
+to mount the IR meter reader onto your electricity meter. Two versions are
+available, each using four round neodymium magnets:
+
+- **6 × 3 mm:** 6 mm diameter, 3 mm thick.
+- **8 × 3 mm:** 8 mm diameter, 3 mm thick.
+
+Choose the case version that matches your magnets.
+
 ## 🚀 Setup
 
 ### Flash the firmware
