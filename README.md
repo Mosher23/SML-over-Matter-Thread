@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="custom_components/smartmeter/brand/icon@2x.png" alt="SML over Matter/Thread integration logo" width="180" height="180">
+</p>
+
 # ⚡ SML over Matter/Thread
 
 Read an electricity meter's **SML data through its infrared interface** using
