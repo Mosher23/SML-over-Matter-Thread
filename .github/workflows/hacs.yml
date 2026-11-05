@@ -1,4 +1,4 @@
-name: Validate HACS integration
+name: Validate Marketplace integration
 
 on:
   push:
@@ -24,7 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate HACS integration
+      - name: Validate Marketplace integration
+        # Marketplace retains the hacs.json metadata and HACS validation action.
         uses: hacs/action@main
         with:
           category: integration

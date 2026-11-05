@@ -3,8 +3,9 @@
 There are two separate installs:
 
 - **USB flash:** puts firmware on a new XIAO.
-- **HACS install:** adds the optional Home Assistant companion. It does not
-  flash the board. After setup, the companion's
+- **Marketplace install (Home Assistant 2026.11+):** adds the optional Home
+  Assistant companion. It does not flash the board. Open **Settings → Marketplace → Add from link** and use
+  this repository’s GitHub URL. After setup, the companion's
   **OTA Firmware** entity can install later releases over Thread.
 
 ## Before you start
@@ -83,9 +84,11 @@ and [install the optional companion](README.md#install-the-home-assistant-compan
 ## Update over Thread
 
 The latest [v1.20 release](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/v1.20)
-contains one universal OTA image. Update the HA companion through HACS to
-**2.1.5** before checking for it: update order follows Matter software version
-**24**, independently of the display label.
+contains one universal OTA image. Update the HA companion through
+**Settings → Updates** (Marketplace on Home Assistant 2026.11+) to
+**2.1.5 or later**, restarting Home Assistant when prompted, before checking
+for it. Update order follows Matter software version **24**, independently of
+the display label.
 
 After flashing and commissioning the meter, use
 **SML over Matter/Thread → OTA Firmware** in Home Assistant:
@@ -103,6 +106,11 @@ Before transfer, the integration validates the release manifest, SHA-256,
 Matter OTA header, and embedded application version. If it fails, inspect
 the entity's `ota_status`, `compatibility_issue`, and `last_error`
 attributes in **Developer tools → States**.
+
+Marketplace updates the companion integration; **OTA Firmware** updates the
+XIAO. Existing HACS installations move to Marketplace automatically with Home
+Assistant 2026.11. The [main setup guide](README.md#install-the-home-assistant-companion)
+covers Marketplace, earlier Home Assistant versions, and manual installation.
 
 The native Matter **Firmware** entity is not this GitHub release checker.
 It may show different available-version information. Use the companion

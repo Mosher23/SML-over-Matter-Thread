@@ -1,8 +1,8 @@
 # SML over Matter/Thread — Firmware
 
 **New to this project?** Start with the [main setup guide](../README.md) for
-USB flashing, Matter commissioning, HACS installation, and OTA updates. This
-page contains the firmware and hardware details.
+USB flashing, Matter commissioning, Marketplace installation, and OTA updates.
+This page contains the firmware and hardware details.
 
 This is an ESP32-C6 port of Claus Muus' `zigbee-smartmeter-reader`. It keeps the
 byte-oriented SML parser and default OBIS mapping, but replaces the Arduino

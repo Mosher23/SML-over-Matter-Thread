@@ -81,20 +81,33 @@ null at startup. Do not erase or re-pair the XIAO as a first step.
 The companion is optional and does **not** replace the Matter integration.
 Install it after your meter appears in Home Assistant Matter.
 
-[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Mosher23&repository=SML-over-Matter-Thread&category=integration)
+On **Home Assistant 2026.11+**, use the built-in **Marketplace** under Settings.
+It replaces HACS; existing HACS installations and custom repositories carry over
+automatically. See the [official Marketplace guide](https://www.home-assistant.io/integrations/marketplace/).
 
-If the button does not add the repository:
+[![Open in Home Assistant Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=Mosher23&repository=SML-over-Matter-Thread&category=integration)
 
-1. Open **HACS → ⋮ → Custom repositories**. Add
-   `https://github.com/Mosher23/SML-over-Matter-Thread` as an **Integration**.
-2. Download **SML over Matter/Thread** from the `main` branch and restart Home
-   Assistant. Firmware release tags are separate from integration updates.
-3. Go to **Settings → Devices & services → Add integration → SML over Matter/Thread**
-   and select your existing Matter device.
+To add the repository manually:
 
-HACS installs only the HA companion, **not XIAO firmware**. For manual
-installation, copy `custom_components/smartmeter` to
+1. Open **Settings → Marketplace → Add from link**.
+2. Enter `https://github.com/Mosher23/SML-over-Matter-Thread` and select **Add**.
+   Complete the GitHub connection if requested. Choose **Integration** if asked
+   for the content type.
+3. Open **SML over Matter/Thread**. To install the companion from the `main`
+   branch, use **⋮ → Install another version** and select `main`, then install.
+   Firmware release tags and companion integration versions are separate.
+4. Follow the integration setup flow and select your existing Matter device.
+   If setup does not open, use **Settings → Devices & services → Add integration
+   → SML over Matter/Thread**. Restart only if Home Assistant asks you to.
+
+Marketplace installs the HA companion. Flash the XIAO firmware separately over
+USB or with **OTA Firmware**. Companion updates appear under **Settings →
+Updates**; restart Home Assistant when prompted after an integration update.
+
+For **Home Assistant 2026.9–2026.10**, use your existing HACS setup or install
+manually. Copy `custom_components/smartmeter` to
 `/config/custom_components/smartmeter`, restart HA, and add the integration.
+Do not install HACS separately on Home Assistant 2026.11+.
 
 | Integration | Entities and controls |
 | --- | --- |
@@ -103,7 +116,7 @@ installation, copy `custom_components/smartmeter` to
 
 The companion uses your existing Matter device and does not create another
 Power sensor. No re-pairing is needed to add it. Keep the companion updated
-through HACS; its version is independent of the XIAO firmware version.
+through Marketplace; its version is independent of the XIAO firmware version.
 
 ## 🎛️ Using the meter
 
@@ -159,12 +172,13 @@ screen unless you intend to clear those values.
 
 ## 🔄 Firmware updates
 
-Update the HA companion through HACS first, then open its **OTA Firmware**
-entity in Home Assistant. Companion **2.1.5** uses Matter's numeric version
+Update the HA companion through **Settings → Updates** (Marketplace) first,
+restart Home Assistant when prompted, then open the companion’s **OTA Firmware**
+entity. Companion **2.1.5** uses Matter's numeric version
 order when determining which firmware updates are available.
 Refresh **OTA Firmware** to check immediately. The repository is now
-`Mosher23/SML-over-Matter-Thread`; use that URL in HACS. Existing entity
-identifiers and pairings are preserved.
+`Mosher23/SML-over-Matter-Thread`; use that URL with Marketplace’s **Add from link**.
+Existing entity identifiers and pairings are preserved.
 Click **Install** when a compatible newer release appears. The image is
 downloaded from GitHub, validated, transferred via Matter Server, and followed
 by a XIAO reboot. **Updates never install
