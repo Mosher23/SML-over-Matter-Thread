@@ -12,6 +12,7 @@ The optional companion adds diagnostics, optical PIN entry, and GitHub OTA
 updates.
 
 **Latest firmware: [v1.20](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/v1.20).**
+**Latest companion integration: [v2.1.7](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/integration-v2.1.7).**
 One universal OTA image supports either antenna. The product and discovery
 name is **SML over Matter/Thread**; controllers may retain an existing name
 until you rename it in their app.
@@ -93,9 +94,8 @@ To add the repository manually:
 2. Enter `https://github.com/Mosher23/SML-over-Matter-Thread` and select **Add**.
    Complete the GitHub connection if requested. Choose **Integration** if asked
    for the content type.
-3. Open **SML over Matter/Thread**. To install the companion from the `main`
-   branch, use **⋮ → Install another version** and select `main`, then install.
-   Firmware release tags and companion integration versions are separate.
+3. Open **SML over Matter/Thread** and select **Install**. Companion releases
+   use `integration-v…` tags; XIAO firmware releases use `v…` tags.
 4. Follow the integration setup flow and select your existing Matter device.
    If setup does not open, use **Settings → Devices & services → Add integration
    → SML over Matter/Thread**. Restart only if Home Assistant asks you to.
@@ -112,7 +112,27 @@ Do not install HACS separately on Home Assistant 2026.11+.
 | Integration | Entities and controls |
 | --- | --- |
 | Home Assistant Matter | Native **Energy**, **Power**, and **External antenna** on/off control. |
-| SML over Matter/Thread companion | **OBIS Received**, **Manufacturer**, **Meter ID**, and **Active antenna** diagnostics; **Meter PIN**, **Send PIN**, **Short light pulse**, **Long light pulse**, and **OTA Firmware**. |
+| SML over Matter/Thread companion | Seven default diagnostics listed below; **Meter PIN**, **Send PIN**, **Short light pulse**, **Long light pulse**, and **OTA Firmware**. |
+
+Companion **2.1.7** enables only these diagnostics by default:
+
+- **Active antenna**
+- **Imported energy OBIS source**
+- **Manufacturer**
+- **Meter ID**
+- **Meter ID OBIS source**
+- **OBIS Received**
+- **Power OBIS source**
+
+The other 17 diagnostics, including profiles, freshness, reading ages and error
+counters, are disabled by default. Enable them individually in **Settings →
+Devices & services → Entities** when needed. Source and reliability diagnostics
+require firmware **1.21+**; older firmware keeps its existing companion functions.
+Home Assistant preserves existing entity preferences during an update, so
+already-enabled diagnostics keep their current settings until you change them.
+
+The companion is registered as a software service: its Device info card shows
+**Version**, while the separate Matter device shows its actual **Firmware**.
 
 The companion uses your existing Matter device and does not create another
 Power sensor. No re-pairing is needed to add it. Keep the companion updated
@@ -174,7 +194,7 @@ screen unless you intend to clear those values.
 
 Update the HA companion through **Settings → Updates** (Marketplace) first,
 restart Home Assistant when prompted, then open the companion’s **OTA Firmware**
-entity. Companion **2.1.5** uses Matter's numeric version
+entity. Companion **2.1.7** uses Matter's numeric version
 order when determining which firmware updates are available.
 Refresh **OTA Firmware** to check immediately. The repository is now
 `Mosher23/SML-over-Matter-Thread`; use that URL with Marketplace’s **Add from link**.

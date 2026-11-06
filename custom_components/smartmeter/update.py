@@ -18,7 +18,7 @@ from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import companion_device_info
+from .const import INTEGRATION_VERSION, companion_device_info
 from .ota import REPOSITORY, MAX_JSON, compatibility, parse_manifest, validate_image
 
 SCAN_INTERVAL = timedelta(hours=6)
@@ -34,7 +34,7 @@ async def _download(session, url: str, limit: int, *, missing_ok=False):
         if parsed.scheme != "https" or parsed.hostname not in _DOWNLOAD_HOSTS or parsed.port not in (None, 443) or parsed.username:
             raise ValueError("Release download redirected outside trusted GitHub hosts")
         async with session.get(url, allow_redirects=False,
-                               headers={"User-Agent": "SML-over-Matter-Thread-HA/2.1.5"},
+                               headers={"User-Agent": f"SML-over-Matter-Thread-HA/{INTEGRATION_VERSION}"},
                                timeout=ClientTimeout(total=120)) as response:
             if response.status in (301, 302, 303, 307, 308):
                 url = urljoin(url, response.headers["Location"])

@@ -47,6 +47,9 @@ stubs = {
     "homeassistant.const": module("const", EntityCategory=types.SimpleNamespace(CONFIG="config")),
     "homeassistant.core": module("core", callback=lambda fn: fn),
     "homeassistant.exceptions": module("exceptions", HomeAssistantError=HAError),
+    "homeassistant.helpers.device_registry": module(
+        "device_registry", DeviceEntryType=types.SimpleNamespace(SERVICE="service")
+    ),
     "homeassistant.helpers.aiohttp_client": module("aiohttp_client", async_get_clientsession=lambda hass: None),
     "test_smartmeter": module("test_smartmeter", __path__=[str(ROOT / "custom_components/smartmeter")]),
 }

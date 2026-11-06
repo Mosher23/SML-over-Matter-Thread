@@ -23,12 +23,13 @@ async def async_setup_entry(
 
 
 class ActivePowerObisSeenSensor(CoordinatorEntity, BinarySensorEntity):
-    """Show whether a checksum-valid SML frame contained 1-0:16.7.0*255."""
+    """Latch whether validated active power has been received during this boot."""
 
     _attr_has_entity_name = True
     _attr_name = "OBIS Received"
     _attr_icon = "mdi:meter-electric-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = True
 
     def __init__(self, runtime: SmartMeterRuntimeData) -> None:
         """Initialize the entity."""

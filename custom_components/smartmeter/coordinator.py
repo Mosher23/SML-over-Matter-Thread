@@ -18,6 +18,7 @@ from .const import (
     METER_MANUFACTURER_ATTRIBUTE_ID,
     ON_OFF_ATTRIBUTE_ID,
     ON_OFF_CLUSTER_ID,
+    RELIABILITY_FIELDS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,6 +46,10 @@ class SmartMeterCoordinator(DataUpdateCoordinator[dict[str, object]]):
                 METER_MANUFACTURER_ATTRIBUTE_ID,
                 EXTERNAL_ANTENNA_ATTRIBUTE_ID,
             )
+        ]
+        self.reliability_paths = [
+            create_attribute_path(endpoint_id, DIAGNOSTICS_CLUSTER_ID, field[0])
+            for field in RELIABILITY_FIELDS
         ]
         # Basic Information software version and string, for prompt HA update
         # entity refresh after an OTA reboot rather than a multi-minute wait.
@@ -78,6 +83,16 @@ class SmartMeterCoordinator(DataUpdateCoordinator[dict[str, object]]):
                     )
                 except Exception:
                     _LOGGER.debug("Matter antenna switch is not readable on node %s", self.node_id)
+            # Keep legacy reads working on firmware without the new attributes.
+            # Isolate this optional read so a partial upgrade cannot hide identity.
+            if type(values.get("0/40/9")) is int and values["0/40/9"] >= 25:
+                try:
+                    values.update(await asyncio.wait_for(
+                        self.matter_client.read_attribute(self.node_id, self.reliability_paths),
+                        timeout=10,
+                    ))
+                except Exception:
+                    _LOGGER.debug("Reliability diagnostics unavailable on node %s", self.node_id)
             return values
         except UpdateFailed:
             raise

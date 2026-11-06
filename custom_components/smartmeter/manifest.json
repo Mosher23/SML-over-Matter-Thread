@@ -1,7 +1,7 @@
 {
   "domain": "smartmeter",
   "name": "SML over Matter/Thread",
-  "version": "2.1.5",
+  "version": "2.1.7",
   "codeowners": ["@Mosher23"],
   "config_flow": true,
   "dependencies": ["matter"],

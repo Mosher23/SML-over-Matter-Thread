@@ -85,6 +85,9 @@ stubs = {
     "homeassistant.helpers.entity_platform": module(
         "entity_platform", AddEntitiesCallback=object
     ),
+    "homeassistant.helpers.device_registry": module(
+        "device_registry", DeviceEntryType=types.SimpleNamespace(SERVICE="service")
+    ),
     "homeassistant.helpers.entity_registry": module("entity_registry", async_get=lambda _hass: None),
     "homeassistant.helpers.update_coordinator": module(
         "update_coordinator", DataUpdateCoordinator=FakeCoordinator,
@@ -179,7 +182,59 @@ class CompanionTests(unittest.IsolatedAsyncioTestCase):
         registry = types.SimpleNamespace(async_get_entity_id=lambda *_: None)
         with patch.object(sensor.er, "async_get", return_value=registry):
             await sensor.async_setup_entry(None, entry, entities.extend)
-        self.assertEqual([entity._attr_name for entity in entities], ["Meter ID", "Manufacturer", "Active antenna"])
+        self.assertEqual([entity._attr_name for entity in entities],
+                         ["Meter ID", "Manufacturer", "Active antenna"] + [field[1] for field in const.RELIABILITY_FIELDS])
+
+    async def test_exactly_seven_diagnostics_are_enabled_by_default(self):
+        entities = []
+        entry = types.SimpleNamespace(runtime_data=self.runtime, entry_id="companion-entry")
+        updates = []
+        registry = types.SimpleNamespace(
+            async_get_entity_id=lambda *_: None,
+            async_update_entity=lambda *args, **kwargs: updates.append((args, kwargs)),
+        )
+        with patch.object(sensor.er, "async_get", return_value=registry):
+            await sensor.async_setup_entry(None, entry, entities.extend)
+        await binary_sensor.async_setup_entry(None, entry, entities.extend)
+        enabled = {entity._attr_name for entity in entities
+                   if entity._attr_entity_registry_enabled_default}
+        self.assertEqual(enabled, {
+            "Active antenna", "Imported energy OBIS source", "Manufacturer",
+            "Meter ID", "Meter ID OBIS source", "OBIS Received", "Power OBIS source",
+        })
+        self.assertEqual(len(entities), 24)
+        self.assertEqual(sum(not entity._attr_entity_registry_enabled_default for entity in entities), 17)
+        self.assertEqual(updates, [])  # Existing registry choices are not overwritten.
+        self.assertEqual(len({entity._attr_unique_id for entity in entities}), len(entities))
+        for entity in entities:
+            self.assertEqual(entity._attr_entity_category, "diagnostic")
+
+    async def test_reliability_reads_only_supported_firmware_and_isolates_failures(self):
+        self.client.read_attribute.side_effect = [
+            {"0/40/9": 25, "0/40/10": "1.21"},
+            {"1/4294048769/5": "fresh", "1/4294048769/11": 0},
+        ]
+        data = await self.coordinator._async_update_data()
+        self.assertEqual(data["1/4294048769/5"], "fresh")
+        self.assertEqual(len(self.client.read_attribute.await_args_list[1].args[1]), 20)
+        self.client.read_attribute.side_effect = [
+            {"0/40/9": 25, "1/4294048769/1": "meter123"}, RuntimeError("partial interview"),
+        ]
+        data = await self.coordinator._async_update_data()
+        self.assertEqual(data["1/4294048769/1"], "meter123")
+
+    def test_reliability_age_and_counter_validation(self):
+        age = sensor.ReliabilitySensor(self.runtime, 11, "Power reading age", "timer", "age")
+        count = sensor.ReliabilitySensor(self.runtime, 15, "SML CRC errors", "alert", "counter")
+        self.assertIsNone(age.native_value)
+        for invalid in (None, True, -1, "30", 0xFFFFFFFF):
+            self.coordinator.data = {age._attribute_path: invalid}
+            self.assertIsNone(age.native_value)
+        self.coordinator.data = {age._attribute_path: 0, count._attribute_path: 0}
+        self.assertEqual(age.native_value, 0)
+        self.assertEqual(count.native_value, 0)
+        self.coordinator.data[count._attribute_path] = 0xFFFFFFFF
+        self.assertEqual(count.native_value, 0xFFFFFFFF)
 
     async def test_antenna_diagnostic_reports_live_switch_and_legacy_setting(self):
         active = sensor.ActiveAntennaSensor(self.runtime)
@@ -277,6 +332,8 @@ class CompanionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(entity._attr_device_info["manufacturer"], "Mosher23")
             self.assertEqual(entity._attr_device_info["model"], "Home Assistant companion integration")
             self.assertEqual(entity._attr_device_info["sw_version"], const.INTEGRATION_VERSION)
+            self.assertEqual(entity._attr_device_info["entry_type"], "service")
+            self.assertFalse(entity._attr_device_info.get("hw_version"))
             self.assertEqual(entity._attr_device_info["configuration_url"], const.PROJECT_URL)
 
     async def test_removes_only_its_legacy_power_entity(self):

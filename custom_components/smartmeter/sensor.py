@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import SmartMeterRuntimeData
 from .const import (
+    DEFAULT_ENABLED_RELIABILITY_ATTRIBUTE_IDS,
     DIAGNOSTICS_CLUSTER_ID,
     DOMAIN,
     EXTERNAL_ANTENNA_ATTRIBUTE_ID,
@@ -21,6 +22,7 @@ from .const import (
     METER_MANUFACTURER_ATTRIBUTE_ID,
     ON_OFF_ATTRIBUTE_ID,
     ON_OFF_CLUSTER_ID,
+    RELIABILITY_FIELDS,
     companion_device_info,
 )
 
@@ -48,6 +50,7 @@ async def async_setup_entry(
                 "factory",
             ),
             ActiveAntennaSensor(runtime),
+            *(ReliabilitySensor(runtime, *field) for field in RELIABILITY_FIELDS),
         ]
     )
 
@@ -59,6 +62,7 @@ class ActiveAntennaSensor(CoordinatorEntity, SensorEntity):
     _attr_name = "Active antenna"
     _attr_icon = "mdi:antenna"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = True
 
     def __init__(self, runtime: SmartMeterRuntimeData) -> None:
         super().__init__(runtime.coordinator)
@@ -87,6 +91,7 @@ class MeterIdentitySensor(CoordinatorEntity, SensorEntity):
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = True
 
     def __init__(
         self, runtime: SmartMeterRuntimeData, attribute_id: int, name: str, icon: str
@@ -109,3 +114,32 @@ class MeterIdentitySensor(CoordinatorEntity, SensorEntity):
         if isinstance(value, bytes):
             value = value.decode("ascii", errors="replace")
         return value if isinstance(value, str) and value else None
+
+
+class ReliabilitySensor(MeterIdentitySensor):
+    """Firmware-validated status, mapping, age or receive counter.
+
+    Power and energy remain native Matter entities. Ages are sampled on the
+    board every five seconds and polled together every thirty seconds.
+    """
+
+    def __init__(self, runtime, attribute_id, name, icon, kind):
+        super().__init__(runtime, attribute_id, name, icon)
+        self._kind = kind
+        self._attr_entity_registry_enabled_default = (
+            attribute_id in DEFAULT_ENABLED_RELIABILITY_ATTRIBUTE_IDS
+        )
+        if kind == "age":
+            self._attr_native_unit_of_measurement = "s"
+            self._attr_device_class = "duration"
+
+    @property
+    def native_value(self):
+        value = (self.coordinator.data or {}).get(self._attribute_path)
+        if self._kind == "text":
+            return super().native_value
+        if type(value) is not int or not 0 <= value <= 0xFFFFFFFF:
+            return None
+        if self._kind == "age" and value == 0xFFFFFFFF:
+            return None  # Never received is unknown, not a multi-year age.
+        return value

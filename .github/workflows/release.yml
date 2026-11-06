@@ -20,7 +20,11 @@ jobs:
   firmware:
     # A release uploaded and validated locally already has its manifest last.
     # Never rebuild and attempt to overwrite those immutable release assets.
-    if: github.event_name != 'release' || !contains(github.event.release.assets.*.name, 'ota-manifest.json')
+    # Companion integration releases use integration-v* and contain no firmware.
+    if: >-
+      github.event_name != 'release' ||
+      (startsWith(github.event.release.tag_name, 'v') &&
+       !contains(github.event.release.assets.*.name, 'ota-manifest.json'))
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:

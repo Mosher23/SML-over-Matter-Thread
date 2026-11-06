@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from homeassistant.helpers.device_registry import DeviceEntryType
+
 NAME = "SML over Matter/Thread"
 DOMAIN = "smartmeter"
 CONF_DEVICE_ID = "device_id"
-INTEGRATION_VERSION = "2.1.5"
+INTEGRATION_VERSION = "2.1.7"
 PROJECT_URL = "https://github.com/Mosher23/SML-over-Matter-Thread"
 
 
@@ -17,6 +19,7 @@ def companion_device_info(device_id: str) -> dict:
         "manufacturer": "Mosher23",
         "model": "Home Assistant companion integration",
         "sw_version": INTEGRATION_VERSION,
+        "entry_type": DeviceEntryType.SERVICE,
         "configuration_url": PROJECT_URL,
     }
 
@@ -39,3 +42,31 @@ METER_MANUFACTURER_ATTRIBUTE_ID = 0x00000002
 EXTERNAL_ANTENNA_ATTRIBUTE_ID = 0x00000003
 ON_OFF_CLUSTER_ID = 0x0006
 ON_OFF_ATTRIBUTE_ID = 0x0000
+
+# Additive v1.21 diagnostics: attribute ID, display name, icon, value kind.
+RELIABILITY_FIELDS = (
+    (5, "Power status", "pulse", "text"),
+    (6, "Imported energy status", "transmission-tower-import", "text"),
+    (7, "Exported energy status", "transmission-tower-export", "text"),
+    (8, "Meter profile", "file-search", "text"),
+    (9, "Profile detection", "magnify", "text"),
+    (10, "Power OBIS source", "code-braces", "text"),
+    (11, "Power reading age", "timer-outline", "age"),
+    (12, "Imported energy reading age", "timer-outline", "age"),
+    (13, "Exported energy reading age", "timer-outline", "age"),
+    (14, "Valid SML frames", "check-network", "counter"),
+    (15, "SML CRC errors", "alert-circle-outline", "counter"),
+    (16, "SML decode errors", "alert-circle-outline", "counter"),
+    (17, "Rejected readings", "alert-circle-outline", "counter"),
+    (18, "Last validation error", "alert-outline", "text"),
+    (19, "Reader health", "heart-pulse", "text"),
+    (20, "Valid SML frame age", "timer-outline", "age"),
+    (21, "UART receive errors", "serial-port", "counter"),
+    (22, "Meter ID OBIS source", "code-braces", "text"),
+    (23, "Imported energy OBIS source", "code-braces", "text"),
+    (24, "Exported energy OBIS source", "code-braces", "text"),
+)
+
+# Keep the standard diagnostic view compact. Other reliability entities remain
+# available in HA's entity registry and can be enabled individually.
+DEFAULT_ENABLED_RELIABILITY_ATTRIBUTE_IDS = frozenset({10, 22, 23})
