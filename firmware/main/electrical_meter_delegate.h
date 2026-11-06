@@ -46,6 +46,7 @@ public:
     NullableInt64 GetNeutralCurrent() override;
 
     CHIP_ERROR SetActivePowerMilliwatts(int64_t value);
+    CHIP_ERROR ClearActivePower();
 
 private:
     // No power measurement is available until the first valid SML reading.

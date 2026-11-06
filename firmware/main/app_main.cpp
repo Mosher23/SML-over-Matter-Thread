@@ -398,6 +398,23 @@ extern "C" void app_main()
         abort();
     }
 
+    // Reliability diagnostics are additive; the standard meter topology stays fixed.
+    for (uint32_t id : {kSmartMeterPowerStatus, kSmartMeterImportStatus, kSmartMeterExportStatus,
+            kSmartMeterProfile, kSmartMeterDetection, kSmartMeterPowerSource,
+            kSmartMeterLastError, kSmartMeterReaderHealth, kSmartMeterIdSource,
+            kSmartMeterImportSource, kSmartMeterExportSource}) {
+        if (!attribute::create(diagnostics_cluster, id, ATTRIBUTE_FLAG_NONE,
+                esp_matter_char_str(empty_meter_identity, 0), kSmartMeterIdentityMaxLength)) abort();
+    }
+    for (uint32_t id : {kSmartMeterPowerAge, kSmartMeterImportAge, kSmartMeterExportAge,
+            kSmartMeterValidFrames, kSmartMeterCrcErrors, kSmartMeterDecodeErrors,
+            kSmartMeterRejectedReadings, kSmartMeterFrameAge, kSmartMeterUartOverflows}) {
+        const bool age = id == kSmartMeterPowerAge || id == kSmartMeterImportAge ||
+            id == kSmartMeterExportAge || id == kSmartMeterFrameAge;
+        if (!attribute::create(diagnostics_cluster, id, ATTRIBUTE_FLAG_NONE,
+                esp_matter_uint32(age ? UINT32_MAX : 0))) abort();
+    }
+
     // On means external U.FL antenna, Off means internal ceramic antenna.
     // Keep the exact v1.12 meter layout. HA exposes this cluster as its
     // antenna switch; no separate outlet endpoint is advertised to Apple.

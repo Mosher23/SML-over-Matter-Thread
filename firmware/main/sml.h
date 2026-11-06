@@ -1,7 +1,7 @@
 /*
  * This file is part of Smart Message Language (SML) parser.
  * Original source: https://github.com/olliiiver/sml_parser
- * Licensed under GPLv2.1: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+ * Licensed under LGPL-2.1: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
  * Modified by Claus Muus, 01.08.2025
  */
 
@@ -14,8 +14,7 @@
  * The library uses shared static memory to store the parsed SML message.
  * Use \ref smlState to parse the message byte by byte.
  * This will store the parsed data in static memory.
- * To access values, check whether the OBIS code you are interested in has just
- * been parsed via \ref smlOBISCheck and if so, parse that value using \ref
+ * After SML_FINAL, call smlNextEntry() for each validated list entry, then use \ref smlOBISCheck and if so, parse that value using \ref
  * smlOBISByUnit to get the data in full precision or one of the convenience
  * functions like \ref smlOBISW to get the data directly as double in the
  * specified unit.
@@ -23,6 +22,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef enum {
   SML_START,
@@ -117,13 +117,20 @@ typedef enum {
 /*! Parse a single byte of an SML message and return the status after parsing
  * that. */
 sml_states_t smlState(unsigned char &byte);
+void smlReset();
+// Iterate entries only after SML_FINAL. Each frame is fully validated first.
+bool smlNextEntry();
+// Logical server identity from the validated GetList.Response, not a billing serial.
+bool smlServerId(unsigned char *output, size_t capacity, size_t *length);
+enum sml_decode_result_t { SML_DECODE_OK, SML_DECODE_MALFORMED, SML_DECODE_UNIT,
+  SML_DECODE_SCALER, SML_DECODE_VALUE, SML_DECODE_OVERFLOW };
+sml_decode_result_t smlOBISDecode(long long &value, signed char &scaler, sml_units_t unit);
 
 /* ! Return whether the 6-character OBIS identifier (binary encoded) matches to
  * the last received message.
  * If it does, use one of the specific functions to retrieve the value.
  *
- * Calling this function makes sense after a list was received and parsed, i.e.
- * after the state was \ref SML_LISTEND .
+ * Call this after smlNextEntry() returns true following SML_FINAL.
  *
  * OBIS (Object Identification System) identifies the kind of message that was
  * received in the format `A-B:C.D.E*F`, the encoding in \p obis is

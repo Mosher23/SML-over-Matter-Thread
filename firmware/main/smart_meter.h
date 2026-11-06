@@ -23,3 +23,25 @@ esp_err_t smart_meter_register_console_commands();
 
 // Blink the status LED three times and wait for completion (task context only).
 esp_err_t smart_meter_confirm_antenna_toggle();
+
+// v1.21 read-only reliability diagnostics; existing IDs above are unchanged.
+constexpr uint32_t kSmartMeterPowerStatus = 5;
+constexpr uint32_t kSmartMeterImportStatus = 6;
+constexpr uint32_t kSmartMeterExportStatus = 7;
+constexpr uint32_t kSmartMeterProfile = 8;
+constexpr uint32_t kSmartMeterDetection = 9;
+constexpr uint32_t kSmartMeterPowerSource = 10;
+constexpr uint32_t kSmartMeterPowerAge = 11;
+constexpr uint32_t kSmartMeterImportAge = 12;
+constexpr uint32_t kSmartMeterExportAge = 13;
+constexpr uint32_t kSmartMeterValidFrames = 14;
+constexpr uint32_t kSmartMeterCrcErrors = 15;
+constexpr uint32_t kSmartMeterDecodeErrors = 16;
+constexpr uint32_t kSmartMeterRejectedReadings = 17;
+constexpr uint32_t kSmartMeterLastError = 18;
+constexpr uint32_t kSmartMeterReaderHealth = 19;
+constexpr uint32_t kSmartMeterFrameAge = 20;
+constexpr uint32_t kSmartMeterUartOverflows = 21;
+constexpr uint32_t kSmartMeterIdSource = 22;
+constexpr uint32_t kSmartMeterImportSource = 23;
+constexpr uint32_t kSmartMeterExportSource = 24;

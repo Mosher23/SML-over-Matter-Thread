@@ -93,3 +93,13 @@ CHIP_ERROR SmartMeterPowerDelegate::SetActivePowerMilliwatts(int64_t value)
     }
     return CHIP_NO_ERROR;
 }
+
+CHIP_ERROR SmartMeterPowerDelegate::ClearActivePower()
+{
+    if (!mActivePower.IsNull()) {
+        mActivePower.SetNull();
+        MatterReportingAttributeChangeCallback(mEndpointId, ElectricalPowerMeasurement::Id,
+                                               Attributes::ActivePower::Id);
+    }
+    return CHIP_NO_ERROR;
+}

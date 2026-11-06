@@ -23,7 +23,7 @@ sys.modules[spec.name] = ota
 spec.loader.exec_module(ota)
 
 
-def package(source: Path, output: Path, *, ota_only=False):
+def package(source: Path, output: Path, *, ota_only=False, ota_build: Path | None = None):
     config = (source / "main/MatterProjConfig.h").read_text()
     version = int(re.search(r"#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION (\d+)", config)[1])
     string = re.search(r'#define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION_STRING "([^"]+)"', config)[1]
@@ -40,7 +40,7 @@ def package(source: Path, output: Path, *, ota_only=False):
     output.mkdir(parents=True, exist_ok=True)
     variants = ("ota",) if ota_only else ("internal", "external", "ota")
     for variant in variants:
-        build = source / f"build-{variant}"
+        build = ota_build if variant == "ota" and ota_build else source / f"build-{variant}"
         sdk = (build / "config/sdkconfig.h").read_text()
         expected = ["#define CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE 1",
                     f"#define CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER {version}"]
@@ -96,7 +96,7 @@ def package(source: Path, output: Path, *, ota_only=False):
     subprocess.run([sys.executable, str(tool), "create", "-v", str(ota.VID), "-p", str(ota.PID),
                     "-vn", str(version), "-vs", string, "-da", "sha256",
                     "-mi", str(ota.BOOTSTRAP_VERSION), "-ma", str(maximum), "-rn", notes,
-                    str(source / "build-ota/IR_Meter_Thread_Matter.bin"), str(image)], check=True)
+                    str((ota_build or source / "build-ota") / "IR_Meter_Thread_Matter.bin"), str(image)], check=True)
     data = image.read_bytes()
     manifest = {"schema": 1, "vendor_id": ota.VID, "product_id": ota.PID,
                 "hardware_version": 1, "software_version": version, "version_string": string,
@@ -128,5 +128,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--ota-only", action="store_true",
                         help="Package only the universal OTA build; no USB builds are required")
+    parser.add_argument("--ota-build", type=Path, help="Use an existing universal build directory")
     args = parser.parse_args()
-    package(args.source.resolve(), args.output.resolve(), ota_only=args.ota_only)
+    package(args.source.resolve(), args.output.resolve(), ota_only=args.ota_only,
+            ota_build=args.ota_build.resolve() if args.ota_build else None)

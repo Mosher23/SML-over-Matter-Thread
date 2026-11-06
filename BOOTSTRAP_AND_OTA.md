@@ -83,11 +83,11 @@ and [install the optional companion](README.md#install-the-home-assistant-compan
 
 ## Update over Thread
 
-The latest [v1.20 release](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/v1.20)
+The latest [v1.21 release](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/v1.21)
 contains one universal OTA image. Update the HA companion through
 **Settings → Updates** (Marketplace on Home Assistant 2026.11+) to
-**2.1.5 or later**, restarting Home Assistant when prompted, before checking
-for it. Update order follows Matter software version **24**, independently of
+**2.1.7**, restarting Home Assistant when prompted, before checking
+for it. Update order follows Matter software version **25**, independently of
 the display label.
 
 After flashing and commissioning the meter, use
@@ -138,7 +138,7 @@ text version markers together in `firmware/main/MatterProjConfig.h`,
 `firmware/CMakeLists.txt`, and `firmware/sdkconfig.defaults` as appropriate.
 
 Push tested source, then publish a stable GitHub release whose tag matches
-the firmware string version (for example, `v1.20`). GitHub Actions builds
+the firmware string version (for example, `v1.21`). GitHub Actions builds
 the pinned SDK, runs tests, checks the tag, and attaches individual assets
 with `ota-manifest.json` **last**. Do not replace published assets or reuse
 a Matter numeric software version. Test an image on an accessible meter

@@ -121,4 +121,22 @@ config SMARTMETER_MAX_UPDATE_INTERVAL_SECONDS
     range 10 86400
     default 3600
 
+config SMARTMETER_POWER_FRESHNESS_SECONDS
+    int "Power stale timeout (seconds)"
+    range 5 3600
+    default 30
+
+config SMARTMETER_ENERGY_FRESHNESS_SECONDS
+    int "Energy stale timeout (seconds)"
+    range 10 86400
+    default 120
+
+config SMARTMETER_MAX_POWER_W
+    int "Installation maximum absolute power (W)"
+    range 100 100000000
+    default 1000000
+    help
+        Reject power beyond this capacity and implausible counter increases.
+        Both import and export are supported. This is validation, not a relay limit.
+
 endmenu

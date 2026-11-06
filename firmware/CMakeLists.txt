@@ -8,8 +8,8 @@ if(NOT DEFINED ENV{ESP_MATTER_DEVICE_PATH})
     set(ENV{ESP_MATTER_DEVICE_PATH} $ENV{ESP_MATTER_PATH}/device_hal/device/esp32c6_devkit_c)
 endif()
 
-set(PROJECT_VER "1.20")
-set(PROJECT_VER_NUMBER 24)
+set(PROJECT_VER "1.21")
+set(PROJECT_VER_NUMBER 25)
 
 set(ESP_MATTER_PATH $ENV{ESP_MATTER_PATH})
 set(MATTER_SDK_PATH ${ESP_MATTER_PATH}/connectedhomeip/connectedhomeip)

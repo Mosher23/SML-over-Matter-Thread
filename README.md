@@ -11,7 +11,7 @@ Apple Home displays the energy meter without a separate antenna outlet.
 The optional companion adds diagnostics, optical PIN entry, and GitHub OTA
 updates.
 
-**Latest firmware: [v1.20](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/v1.20).**
+**Latest firmware: [v1.21](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/v1.21).**
 **Latest companion integration: [v2.1.7](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/integration-v2.1.7).**
 One universal OTA image supports either antenna. The product and discovery
 name is **SML over Matter/Thread**; controllers may retain an existing name
@@ -23,6 +23,15 @@ meter model. See the [supported readings](firmware/README.md#device-identity).
 
 > This is a development project, not a certified Matter product. It uses a
 > test certificate, development vendor ID, and sample serial number.
+
+## 🔎 Firmware 1.21 reliability
+
+Firmware **v1.21** adds validated SML decoding, automatic OBIS mapping profiles,
+independent reading ages and stale detection. Power becomes unknown after
+30 seconds without a valid measurement; cumulative energy is retained and
+marked stale after 120 seconds. Companion **2.1.7** provides the diagnostic
+entities; advanced status, age and error entities can be enabled when needed.
+See [supported mappings, validation and testing](docs/FIRMWARE_1_21.md).
 
 ## 🧰 What you need
 
@@ -56,7 +65,7 @@ Follow the [first-time USB flashing guide](BOOTSTRAP_AND_OTA.md#first-time-usb-f
 and choose a [release with USB bootstrap files](https://github.com/Mosher23/SML-over-Matter-Thread/releases).
 OTA-only releases are for boards that have already been set up.
 For an already configured board, use the single **SML-over-Matter-Thread.ota** from
-[v1.20](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/v1.20). It keeps
+[v1.21](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/v1.21). It keeps
 the saved antenna selection. This OTA release does not include USB flash files.
 
 ### Add the meter to Matter

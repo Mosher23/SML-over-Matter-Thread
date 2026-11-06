@@ -2,6 +2,7 @@
 
 #include "electrical_meter_delegate.h"
 #include "sml.h"
+#include "meter_readings.h"
 
 #include <app/data-model/Nullable.h>
 #include <data_model_provider/clusters/electrical_energy_measurement/integration.h>
@@ -32,26 +33,13 @@ using namespace chip::app::Clusters;
 namespace {
 constexpr char TAG[] = "smart_meter";
 
-enum class ReadingType : uint8_t {
-    ActivePower,
-    ImportedEnergy,
-    ExportedEnergy,
-};
-
-struct ObisHandler {
-    uint8_t obis[6];
-    sml_units_t unit;
-    ReadingType type;
-};
-
-constexpr ObisHandler kHandlers[] = {
-    {{0x01, 0x00, 0x10, 0x07, 0x00, 0xff}, SML_WATT, ReadingType::ActivePower},
-    {{0x01, 0x00, 0x01, 0x08, 0x00, 0xff}, SML_WATT_HOUR, ReadingType::ImportedEnergy},
-    {{0x01, 0x00, 0x02, 0x08, 0x00, 0xff}, SML_WATT_HOUR, ReadingType::ExportedEnergy},
-};
-
-constexpr uint8_t kMeterIdObis[] = {0x01, 0x00, 0x60, 0x01, 0x00, 0xff};
-constexpr uint8_t kMeterManufacturerObis[] = {0x01, 0x00, 0x60, 0x32, 0x01, 0x01};
+constexpr uint8_t kMeterIdObis[] = {1, 0, 96, 1, 0, 255};
+constexpr uint8_t kMeterIdFactoryAlias[] = {0, 0, 96, 1, 255, 255};
+constexpr uint8_t kMeterIdEmhAlias[] = {1, 0, 0, 0, 9, 255};
+constexpr const char *kIdSources[] = {"1-0:96.1.0*255", "0-0:96.1.0*255", "0-0:96.1.255*255", "1-0:0.0.9*255", "SML serverId", "none"};
+constexpr uint8_t kMeterIdAlias[] = {0, 0, 96, 1, 0, 255};
+constexpr uint8_t kMeterManufacturerObis[] = {129, 129, 199, 130, 3, 255};
+constexpr uint8_t kMeterManufacturerAlias[] = {1, 0, 96, 50, 1, 1};
 constexpr size_t kMaxMeterIdentityLength = kSmartMeterIdentityMaxLength;
 
 struct TextReading {
@@ -59,32 +47,27 @@ struct TextReading {
     char value[kMaxMeterIdentityLength + 1] = {};
 };
 
-struct Reading {
-    bool valid = false;
-    int64_t value = 0; // Matter units: mW or mWh
-    int64_t last_published = 0;
-    TickType_t last_publish_tick = 0;
-};
-
-struct CandidateReading {
-    bool valid = false;
-    int64_t value = 0;
-};
-
-struct PendingFrame {
-    CandidateReading power;
-    CandidateReading imported;
-    CandidateReading exported;
+struct PendingFrame : meter::Frame {
     TextReading meter_id;
     TextReading manufacturer;
+    uint8_t id_rank = 5;
+    bool primary_manufacturer = false;
+    bool identity_conflict = false;
 };
 
 struct State {
     uint16_t endpoint_id = 0;
     SmartMeterPowerDelegate *power_delegate = nullptr;
-    Reading power;
-    Reading imported;
-    Reading exported;
+    meter::Tracker readings;
+    uint32_t valid_frames = 0, crc_errors = 0, decode_errors = 0, uart_overflows = 0;
+    uint64_t last_frame_ms = 0, last_uart_ms = 0;
+    bool uart_seen = false;
+    uint64_t session = 0;
+    bool ever_power = false;
+    uint8_t id_rank = 5;
+    uint64_t identity_ms = 0;
+    TextReading proposed_identity;
+    unsigned identity_confirmations = 0;
     TextReading meter_id;
     TextReading manufacturer;
     PendingFrame pending;
@@ -105,9 +88,12 @@ struct OpticalRequest {
 
 QueueHandle_t g_optical_queue = nullptr;
 SemaphoreHandle_t g_uart_mutex = nullptr;
+QueueHandle_t g_uart_events = nullptr;
 TaskHandle_t g_led_task_handle = nullptr;
 std::atomic_bool g_optical_busy{false};
 std::atomic_bool g_antenna_confirmation_pending{false};
+
+uint64_t monotonic_ms() { return System::SystemClock().GetMonotonicTimestamp().count(); }
 
 constexpr ledc_mode_t kLedSpeedMode = LEDC_LOW_SPEED_MODE;
 constexpr ledc_timer_t kLedTimer = LEDC_TIMER_0;
@@ -122,103 +108,63 @@ constexpr uint32_t kLedAntennaBlinkMs = 80;
 constexpr unsigned kLedAntennaBlinks = 3;
 
 struct PublishSnapshot {
-    uint16_t endpoint_id;
-    SmartMeterPowerDelegate *delegate;
-    bool publish_power;
-    bool power_valid;
-    int64_t power;
-    bool publish_imported;
-    bool imported_valid;
-    int64_t imported;
-    bool publish_exported;
-    bool exported_valid;
-    int64_t exported;
+    uint16_t endpoint_id = 0;
+    SmartMeterPowerDelegate *delegate = nullptr;
+    meter::Tracker readings;
+    TextReading meter_id, manufacturer;
+    uint32_t valid_frames = 0, crc_errors = 0, decode_errors = 0, uart_overflows = 0;
+    uint64_t now_ms = 0, last_frame_ms = 0, session = 0;
+    uint8_t id_rank = 5;
+    bool optical_busy = false, uart_recent = false;
+    bool publish_power = false, publish_energy = false, applied_power_fresh = false, ever_power = false;
 };
-
-struct IdentitySnapshot {
-    uint16_t endpoint_id;
-    bool meter_id_changed;
-    bool manufacturer_changed;
-    char meter_id[kMaxMeterIdentityLength + 1];
-    char manufacturer[kMaxMeterIdentityLength + 1];
-};
-
-CandidateReading &pending_for(ReadingType type)
-{
-    switch (type) {
-    case ReadingType::ActivePower:
-        return g_state.pending.power;
-    case ReadingType::ImportedEnergy:
-        return g_state.pending.imported;
-    case ReadingType::ExportedEnergy:
-        return g_state.pending.exported;
-    }
-    return g_state.pending.power;
-}
-
-void commit_candidate(const CandidateReading &candidate, Reading &reading)
-{
-    if (candidate.valid) {
-        reading.value = candidate.value;
-        reading.valid = true;
-    }
-}
-
-bool commit_text(const TextReading &candidate, TextReading &reading)
-{
-    if (!candidate.valid || (reading.valid && strcmp(candidate.value, reading.value) == 0)) {
-        return false;
-    }
-    reading = candidate;
-    return true;
-}
+// One static snapshot in flight. Only the reader writes it, and only after the
+// Matter callback releases it. No allocation failure, data races, or lost retry.
+PublishSnapshot g_queued, g_ack;
+enum Publication { Idle, Pending, Done, Failed };
+std::atomic<Publication> g_publication{Idle};
+bool g_have_ack = false;
+meter::Reading g_power_ack, g_import_ack, g_export_ack;
+uint64_t g_retry_after = 0, g_power_published_ms = 0, g_energy_published_ms = 0;
+bool g_ack_power_fresh = false;
 
 uint8_t commit_pending_frame()
 {
-    commit_candidate(g_state.pending.power, g_state.power);
-    commit_candidate(g_state.pending.imported, g_state.imported);
-    commit_candidate(g_state.pending.exported, g_state.exported);
-    const bool meter_id_changed = commit_text(g_state.pending.meter_id, g_state.meter_id);
-    const bool manufacturer_changed = commit_text(g_state.pending.manufacturer, g_state.manufacturer);
-    g_state.pending = {};
-    return static_cast<uint8_t>((meter_id_changed ? 1 : 0) |
-                                (manufacturer_changed ? 2 : 0));
+    auto &pending = g_state.pending;
+    if (pending.identity_conflict) {
+        g_state.readings.reject("conflicting meter identity"); pending = {}; return 0;
+    }
+    const uint64_t now = monotonic_ms();
+    if (pending.id_rank > g_state.id_rank && now - g_state.identity_ms < g_state.readings.energy_timeout_ms)
+        pending.meter_id = {}; // Do not alternate between equivalent identifier fields.
+    bool id_changed = pending.meter_id.valid && (!g_state.meter_id.valid ||
+        strcmp(pending.meter_id.value, g_state.meter_id.value));
+    if (id_changed && g_state.meter_id.valid) {
+        if (!g_state.proposed_identity.valid || strcmp(g_state.proposed_identity.value, pending.meter_id.value)) {
+            g_state.proposed_identity = pending.meter_id; g_state.identity_confirmations = 0;
+        }
+        if (++g_state.identity_confirmations < 3) { pending = {}; return 0; }
+        g_state.readings.reset_meter(); ++g_state.session;
+        g_state.manufacturer = {};
+    }
+    bool manufacturer_changed = pending.manufacturer.valid && (!g_state.manufacturer.valid ||
+        strcmp(pending.manufacturer.value, g_state.manufacturer.value));
+    if (pending.meter_id.valid) {
+        g_state.meter_id = pending.meter_id; g_state.id_rank = pending.id_rank; g_state.identity_ms = now;
+        g_state.proposed_identity = {}; g_state.identity_confirmations = 0;
+    }
+    if (pending.manufacturer.valid) g_state.manufacturer = pending.manufacturer;
+    g_state.readings.commit(pending, monotonic_ms());
+    g_state.ever_power = g_state.ever_power || g_state.readings.power.valid;
+    pending = {};
+    return (id_changed ? 1 : 0) | (manufacturer_changed ? 2 : 0);
 }
 
-void publish_meter_identity(intptr_t argument)
-{
-    auto *snapshot = reinterpret_cast<IdentitySnapshot *>(argument);
-    if (snapshot == nullptr) {
-        return;
-    }
-    if (snapshot->meter_id_changed) {
-        esp_matter_attr_val_t value = esp_matter_char_str(
-            snapshot->meter_id, strlen(snapshot->meter_id));
-        const esp_err_t error = esp_matter::attribute::update(
-            snapshot->endpoint_id, kSmartMeterDiagnosticsClusterId,
-            kSmartMeterIdAttributeId, &value);
-        if (error != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to publish meter ID: %s", esp_err_to_name(error));
-        }
-    }
-    if (snapshot->manufacturer_changed) {
-        esp_matter_attr_val_t value = esp_matter_char_str(
-            snapshot->manufacturer, strlen(snapshot->manufacturer));
-        const esp_err_t error = esp_matter::attribute::update(
-            snapshot->endpoint_id, kSmartMeterDiagnosticsClusterId,
-            kSmartMeterManufacturerAttributeId, &value);
-        if (error != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to publish meter manufacturer: %s", esp_err_to_name(error));
-        }
-    }
-    delete snapshot;
-}
-
-bool decode_identity_value(char (&output)[kMaxMeterIdentityLength + 1])
+bool decode_identity_value(char (&output)[kMaxMeterIdentityLength + 1], bool server = false)
 {
     uint8_t raw[kMaxMeterIdentityLength];
     size_t length = 0;
-    if (!smlOBISOctetString(raw, sizeof(raw), &length)) {
+    if (!(server ? smlServerId(raw, sizeof(raw), &length) : smlOBISOctetString(raw, sizeof(raw), &length))) {
         return false;
     }
 
@@ -243,173 +189,177 @@ bool decode_identity_value(char (&output)[kMaxMeterIdentityLength + 1])
     return true;
 }
 
-void publish_active_power_obis_seen(intptr_t argument)
+const char *reading_status(const meter::Reading &reading, uint64_t now, uint64_t timeout)
 {
-    if (argument == 0) {
-        return;
-    }
-
-    esp_matter_attr_val_t value = esp_matter_bool(true);
-    const esp_err_t error = esp_matter::attribute::update(
-        g_state.endpoint_id, kSmartMeterDiagnosticsClusterId,
-        kSmartMeterActivePowerObisSeenAttributeId, &value);
-    if (error != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to publish active-power OBIS diagnostic: %s",
-                 esp_err_to_name(error));
-    }
-}
-
-bool scale_to_milli(int64_t raw, int8_t scaler, int64_t &result)
-{
-    result = raw;
-    int exponent = static_cast<int>(scaler) + 3;
-    while (exponent > 0) {
-        if (result > INT64_MAX / 10 || result < INT64_MIN / 10) {
-            return false;
-        }
-        result *= 10;
-        --exponent;
-    }
-    while (exponent < 0) {
-        result /= 10;
-        ++exponent;
-    }
-    return true;
-}
-
-bool should_publish(const Reading &reading, TickType_t now)
-{
-    if (!reading.valid) {
-        return false;
-    }
-    const TickType_t min_interval = pdMS_TO_TICKS(CONFIG_SMARTMETER_MIN_UPDATE_INTERVAL_SECONDS * 1000ULL);
-    const TickType_t max_interval = pdMS_TO_TICKS(CONFIG_SMARTMETER_MAX_UPDATE_INTERVAL_SECONDS * 1000ULL);
-    const TickType_t elapsed = now - reading.last_publish_tick;
-    return reading.last_publish_tick == 0 ||
-           (reading.value != reading.last_published && elapsed >= min_interval) ||
-           elapsed >= max_interval;
+    return !reading.valid ? "not received" : reading.fresh(now, timeout) ? "fresh" : "stale";
 }
 
 DataModel::Nullable<ElectricalEnergyMeasurement::Structs::EnergyMeasurementStruct::Type>
-make_energy_value(bool valid, int64_t milli_watt_hours, uint64_t now_ms)
+make_energy_value(bool valid, int64_t milli_watt_hours, uint64_t received_ms)
 {
-    if (!valid) {
-        return DataModel::NullNullable;
-    }
+    if (!valid) return DataModel::NullNullable;
     ElectricalEnergyMeasurement::Structs::EnergyMeasurementStruct::Type value = {
         .energy = milli_watt_hours,
-        .startTimestamp = NullOptional,
-        .endTimestamp = NullOptional,
-        .startSystime = NullOptional,
-        .endSystime = MakeOptional(now_ms),
+        .startTimestamp = NullOptional, .endTimestamp = NullOptional,
+        .startSystime = NullOptional, .endSystime = MakeOptional(received_ms),
     };
     return DataModel::Nullable<ElectricalEnergyMeasurement::Structs::EnergyMeasurementStruct::Type>(value);
 }
 
-void publish_snapshot(intptr_t argument)
+void publish_snapshot(intptr_t)
 {
-    auto *snapshot = reinterpret_cast<PublishSnapshot *>(argument);
-    if (snapshot->publish_power && snapshot->power_valid) {
-        CHIP_ERROR error = snapshot->delegate->SetActivePowerMilliwatts(snapshot->power);
-        if (error != CHIP_NO_ERROR) {
-            ESP_LOGE(TAG, "Failed to update active power: %" CHIP_ERROR_FORMAT, error.Format());
-        }
+    auto &s = g_queued;
+    const auto &r = s.readings;
+    const uint64_t now = monotonic_ms();
+    bool success = true;
+    s.applied_power_fresh = r.power.fresh(now, r.power_timeout_ms);
+    if (s.publish_power) {
+        const auto error = r.power.fresh(now, r.power_timeout_ms) ?
+            s.delegate->SetActivePowerMilliwatts(r.power.value) : s.delegate->ClearActivePower();
+        success = error == CHIP_NO_ERROR && success;
     }
-
-    if (snapshot->publish_imported || snapshot->publish_exported) {
-        const uint64_t now_ms = System::SystemClock().GetMonotonicTimestamp().count();
-        auto imported_value = make_energy_value(snapshot->imported_valid, snapshot->imported, now_ms);
-        auto exported_value = make_energy_value(snapshot->exported_valid, snapshot->exported, now_ms);
-        if (!ElectricalEnergyMeasurement::NotifyCumulativeEnergyMeasured(
-                snapshot->endpoint_id, imported_value, exported_value)) {
-            ESP_LOGE(TAG, "Failed to publish cumulative energy");
-        }
+    if (s.publish_energy) {
+        auto imported = make_energy_value(r.imported.valid, r.imported.value, r.imported.received_ms);
+        auto exported = make_energy_value(r.exported.valid, r.exported.value, r.exported.received_ms);
+        success = ElectricalEnergyMeasurement::NotifyCumulativeEnergyMeasured(s.endpoint_id, imported, exported) && success;
     }
+    auto update = [&](uint32_t id, esp_matter_attr_val_t value) {
+        success = esp_matter::attribute::update(s.endpoint_id, kSmartMeterDiagnosticsClusterId, id, &value) == ESP_OK && success;
+    };
+    auto text = [&](uint32_t id, const char *value) { update(id, esp_matter_char_str(const_cast<char *>(value), strlen(value))); };
+    auto number = [&](uint32_t id, uint32_t value) { update(id, esp_matter_uint32(value)); };
+    text(kSmartMeterIdAttributeId, s.meter_id.value);
+    text(kSmartMeterManufacturerAttributeId, s.manufacturer.value);
+    // Latch is independent of freshness; an actual zero is still received data.
+    update(kSmartMeterActivePowerObisSeenAttributeId, esp_matter_bool(s.ever_power));
+    text(kSmartMeterPowerStatus, reading_status(r.power, now, r.power_timeout_ms));
+    text(kSmartMeterImportStatus, reading_status(r.imported, now, r.energy_timeout_ms));
+    text(kSmartMeterExportStatus, reading_status(r.exported, now, r.energy_timeout_ms));
+    text(kSmartMeterProfile, r.profile());
+    text(kSmartMeterDetection, r.detection());
+    text(kSmartMeterPowerSource, meter::source_name(r.source));
+    text(kSmartMeterIdSource, kIdSources[s.id_rank]);
+    text(kSmartMeterImportSource, r.imported.valid ? "1-0:1.8.0*255" : "none");
+    text(kSmartMeterExportSource, r.exported.valid ? "1-0:2.8.0*255" : "none");
+    number(kSmartMeterPowerAge, r.power.age(now));
+    number(kSmartMeterImportAge, r.imported.age(now));
+    number(kSmartMeterExportAge, r.exported.age(now));
+    number(kSmartMeterValidFrames, s.valid_frames);
+    number(kSmartMeterCrcErrors, s.crc_errors);
+    number(kSmartMeterDecodeErrors, s.decode_errors);
+    number(kSmartMeterRejectedReadings, r.rejected);
+    number(kSmartMeterUartOverflows, s.uart_overflows);
+    number(kSmartMeterFrameAge, s.valid_frames ? static_cast<uint32_t>((now - s.last_frame_ms) / 1000) : UINT32_MAX);
+    text(kSmartMeterLastError, r.last_error);
+    const char *health = s.optical_busy ? "optical command active" :
+        !s.uart_recent ? "no UART data" :
+        !s.valid_frames || now - s.last_frame_ms >= r.power_timeout_ms ? "no valid SML frames" :
+        !r.power.fresh(now, r.power_timeout_ms) ? "power missing: check INFO/PIN" : "receiving";
+    text(kSmartMeterReaderHealth, health);
+    g_publication.store(success ? Done : Failed, std::memory_order_release);
+}
 
-    delete snapshot;
+bool changed(const meter::Reading &a, const meter::Reading &b)
+{
+    return a.valid != b.valid || (a.valid && a.value != b.value);
 }
 
 void publish_readings_if_due()
 {
-    TickType_t now = xTaskGetTickCount();
-    const bool publish_power = should_publish(g_state.power, now);
-    const bool publish_imported = should_publish(g_state.imported, now);
-    const bool publish_exported = should_publish(g_state.exported, now);
-
-    if (!publish_power && !publish_imported && !publish_exported) {
-        return;
+    const uint64_t now = monotonic_ms();
+    const auto status = g_publication.load(std::memory_order_acquire);
+    if (status == Pending) return;
+    if (status == Done) {
+        g_ack = g_queued;
+        if (g_queued.publish_power) {
+            g_power_published_ms = g_queued.now_ms; g_ack_power_fresh = g_queued.applied_power_fresh;
+            g_power_ack = g_queued.readings.power;
+        }
+        if (g_queued.publish_energy) {
+            g_energy_published_ms = g_queued.now_ms;
+            g_import_ack = g_queued.readings.imported; g_export_ack = g_queued.readings.exported;
+        }
+        g_have_ack = true;
     }
-
-    const uint16_t endpoint_id = g_state.endpoint_id;
-    SmartMeterPowerDelegate *delegate = g_state.power_delegate;
-    const bool power_valid = g_state.power.valid;
-    const int64_t power = g_state.power.value;
-    const bool imported_valid = g_state.imported.valid;
-    const int64_t imported = g_state.imported.value;
-    const bool exported_valid = g_state.exported.valid;
-    const int64_t exported = g_state.exported.value;
-
-    if (publish_power) {
-        g_state.power.last_published = power;
-        g_state.power.last_publish_tick = now;
-    }
-    if (publish_imported) {
-        g_state.imported.last_published = imported;
-        g_state.imported.last_publish_tick = now;
-    }
-    if (publish_exported) {
-        g_state.exported.last_published = exported;
-        g_state.exported.last_publish_tick = now;
-    }
-
-    auto *snapshot = new (std::nothrow) PublishSnapshot{
-        endpoint_id, delegate, publish_power, power_valid, power,
-        publish_imported, imported_valid, imported,
-        publish_exported, exported_valid, exported,
-    };
-    if (snapshot == nullptr) {
-        ESP_LOGE(TAG, "Failed to allocate Matter publish snapshot");
-        return;
-    }
-
-    CHIP_ERROR error = DeviceLayer::PlatformMgr().ScheduleWork(
-        publish_snapshot, reinterpret_cast<intptr_t>(snapshot));
-    if (error != CHIP_NO_ERROR) {
-        ESP_LOGE(TAG, "Failed to schedule Matter update: %" CHIP_ERROR_FORMAT, error.Format());
-        delete snapshot;
+    if (status == Failed) g_retry_after = now + 1000;
+    g_publication.store(Idle);
+    if (now < g_retry_after) return;
+    const auto &r = g_state.readings;
+    const uint64_t elapsed = now - g_ack.now_ms;
+    const bool power_fresh = r.power.fresh(now, r.power_timeout_ms);
+    const bool ack_fresh = g_ack_power_fresh;
+    const bool session_changed = g_state.session != g_ack.session;
+    const bool publish_power = !g_have_ack || session_changed || power_fresh != ack_fresh ||
+        ((changed(r.power, g_power_ack) && now - g_power_published_ms >= CONFIG_SMARTMETER_MIN_UPDATE_INTERVAL_SECONDS * 1000ULL) ||
+         now - g_power_published_ms >= CONFIG_SMARTMETER_MAX_UPDATE_INTERVAL_SECONDS * 1000ULL);
+    const bool publish_energy = !g_have_ack || session_changed ||
+        ((r.imported.revision != g_import_ack.revision || r.exported.revision != g_export_ack.revision) &&
+         now - g_energy_published_ms >= CONFIG_SMARTMETER_MIN_UPDATE_INTERVAL_SECONDS * 1000ULL);
+    const bool state_change = g_optical_busy.load() != g_ack.optical_busy ||
+        strcmp(reading_status(r.imported, now, r.energy_timeout_ms),
+               reading_status(g_ack.readings.imported, g_ack.now_ms, r.energy_timeout_ms)) ||
+        strcmp(reading_status(r.exported, now, r.energy_timeout_ms),
+               reading_status(g_ack.readings.exported, g_ack.now_ms, r.energy_timeout_ms));
+    if (!publish_power && !publish_energy && !state_change && elapsed < 5000) return;
+    g_queued = {};
+    g_queued.endpoint_id = g_state.endpoint_id; g_queued.delegate = g_state.power_delegate;
+    g_queued.readings = r; g_queued.meter_id = g_state.meter_id; g_queued.manufacturer = g_state.manufacturer;
+    g_queued.valid_frames = g_state.valid_frames; g_queued.crc_errors = g_state.crc_errors;
+    g_queued.decode_errors = g_state.decode_errors; g_queued.uart_overflows = g_state.uart_overflows;
+    g_queued.now_ms = now; g_queued.last_frame_ms = g_state.last_frame_ms; g_queued.session = g_state.session; g_queued.ever_power = g_state.ever_power; g_queued.id_rank = g_state.id_rank;
+    g_queued.optical_busy = g_optical_busy.load();
+    g_queued.uart_recent = g_state.uart_seen && now - g_state.last_uart_ms < r.power_timeout_ms;
+    g_queued.publish_power = publish_power; g_queued.publish_energy = publish_energy;
+    g_publication.store(Pending, std::memory_order_release);
+    if (DeviceLayer::PlatformMgr().ScheduleWork(publish_snapshot, 0) != CHIP_NO_ERROR) {
+        g_publication.store(Failed, std::memory_order_release);
     }
 }
 
 void handle_list_end()
 {
-    if (smlOBISCheck(kMeterIdObis)) {
-        g_state.pending.meter_id.valid =
-            decode_identity_value(g_state.pending.meter_id.value);
-    } else if (smlOBISCheck(kMeterManufacturerObis)) {
-        g_state.pending.manufacturer.valid =
-            decode_identity_value(g_state.pending.manufacturer.value);
+    auto &p = g_state.pending;
+    uint8_t rank = smlOBISCheck(kMeterIdObis) ? 0 : smlOBISCheck(kMeterIdAlias) ? 1 :
+        smlOBISCheck(kMeterIdFactoryAlias) ? 2 : smlOBISCheck(kMeterIdEmhAlias) ? 3 : 4;
+    if (rank < 4) {
+        TextReading next;
+        next.valid = decode_identity_value(next.value);
+        if (next.valid && rank <= p.id_rank) {
+            if (p.meter_id.valid && p.id_rank == rank && strcmp(p.meter_id.value, next.value)) p.identity_conflict = true;
+            p.meter_id = next; p.id_rank = rank;
+        }
+        return;
     }
-
-    for (const auto &handler : kHandlers) {
-        if (!smlOBISCheck(handler.obis)) {
+    bool primary_manufacturer = smlOBISCheck(kMeterManufacturerObis);
+    if (primary_manufacturer || smlOBISCheck(kMeterManufacturerAlias)) {
+        TextReading next;
+        next.valid = decode_identity_value(next.value);
+        // 96.50.1 is a hardware revision on some meters, not a manufacturer.
+        next.valid = next.valid && strlen(next.value) == 3;
+        for (unsigned i = 0; next.valid && i < 3; ++i) next.valid = next.value[i] >= 'A' && next.value[i] <= 'Z';
+        if (next.valid && (primary_manufacturer || !p.primary_manufacturer)) {
+            p.manufacturer = next; p.primary_manufacturer = primary_manufacturer;
+        }
+        return;
+    }
+    struct Handler { uint8_t c, d; sml_units_t unit; meter::Candidate *reading; };
+    const Handler handlers[] = {
+        {16, 7, SML_WATT, &p.total}, {1, 7, SML_WATT, &p.import_power}, {2, 7, SML_WATT, &p.export_power},
+        {36, 7, SML_WATT, &p.phases[0]}, {56, 7, SML_WATT, &p.phases[1]}, {76, 7, SML_WATT, &p.phases[2]},
+        {1, 8, SML_WATT_HOUR, &p.imported}, {2, 8, SML_WATT_HOUR, &p.exported},
+    };
+    for (const auto &h : handlers) {
+        const uint8_t obis[] = {1, 0, h.c, h.d, 0, 255};
+        if (!smlOBISCheck(obis)) continue;
+        long long raw = 0; signed char scaler = 0; int64_t value, quantum;
+        const auto result = smlOBISDecode(raw, scaler, h.unit);
+        if (result != SML_DECODE_OK || !meter::scale(raw, scaler, value) || !meter::scale(1, scaler, quantum)) {
+            if (g_state.decode_errors != UINT32_MAX) ++g_state.decode_errors;
+            g_state.readings.last_error = result == SML_DECODE_UNIT ? "wrong or missing unit" : "invalid number/scaler/overflow";
+            h.reading->valid = false; h.reading->conflict = true;
             continue;
         }
-
-        int64_t raw = 0;
-        signed char scaler = 0;
-        smlOBISByUnit(raw, scaler, handler.unit);
-
-        int64_t matter_value = 0;
-        if (!scale_to_milli(raw, scaler, matter_value)) {
-            ESP_LOGW(TAG, "Ignoring overflowing OBIS value");
-            continue;
-        }
-
-        CandidateReading &reading = pending_for(handler.type);
-        reading.value = matter_value;
-        reading.valid = true;
-        ESP_LOGI(TAG, "OBIS type=%u value=%lld", static_cast<unsigned>(handler.type),
-                 static_cast<long long>(matter_value));
+        h.reading->offer(value, quantum > 0 ? quantum : 1);
     }
 }
 
@@ -503,73 +453,55 @@ void notify_sml_frame_received()
 void smart_meter_task(void *)
 {
     uint8_t buffer[256];
-
+    uint64_t last_byte_ms = 0;
+    bool was_busy = false;
     while (true) {
-        // A queued PIN owns the UART until its optical sequence is complete.
-        // The SML task otherwise immediately reacquires this mutex after each
-        // read and can starve the transmitter indefinitely.
-        if (g_optical_busy.load()) {
-            vTaskDelay(pdMS_TO_TICKS(10));
-            continue;
+        // Run even on silence, partial frames, or a lengthy optical PIN sequence.
+        publish_readings_if_due();
+        const bool busy = g_optical_busy.load();
+        if (busy || was_busy || (last_byte_ms && monotonic_ms() - last_byte_ms > 2000)) {
+            smlReset(); g_state.pending = {}; last_byte_ms = 0;
         }
-        xSemaphoreTake(g_uart_mutex, portMAX_DELAY);
-        if (g_optical_busy.load()) {
-            xSemaphoreGive(g_uart_mutex);
-            vTaskDelay(pdMS_TO_TICKS(10));
-            continue;
+        was_busy = busy;
+        if (busy) { vTaskDelay(pdMS_TO_TICKS(50)); continue; }
+        if (xSemaphoreTake(g_uart_mutex, pdMS_TO_TICKS(50)) != pdTRUE) continue;
+        if (g_optical_busy.load()) { xSemaphoreGive(g_uart_mutex); continue; }
+        uart_event_t event;
+        bool overflow = false;
+        while (xQueueReceive(g_uart_events, &event, 0) == pdTRUE) {
+            if (event.type == UART_FIFO_OVF || event.type == UART_BUFFER_FULL ||
+                event.type == UART_PARITY_ERR || event.type == UART_FRAME_ERR) overflow = true;
+        }
+        if (overflow) {
+            if (g_state.uart_overflows != UINT32_MAX) ++g_state.uart_overflows;
+            g_state.readings.last_error = "UART overflow or framing error";
+            uart_flush_input(static_cast<uart_port_t>(CONFIG_SMARTMETER_UART_NUM));
+            smlReset(); g_state.pending = {};
         }
         const int length = uart_read_bytes(static_cast<uart_port_t>(CONFIG_SMARTMETER_UART_NUM), buffer,
                                            sizeof(buffer), pdMS_TO_TICKS(250));
         xSemaphoreGive(g_uart_mutex);
-        if (length <= 0) {
-            continue;
-        }
-
+        if (length <= 0) continue;
+        g_state.last_uart_ms = last_byte_ms = monotonic_ms(); g_state.uart_seen = true;
         for (int i = 0; i < length; ++i) {
             unsigned char byte = buffer[i];
-            const sml_states_t state = smlState(byte);
-            if (state == SML_VERSION) {
-                g_state.pending = {};
-            } else if (state == SML_LISTEND) {
-                handle_list_end();
-            } else if (state == SML_FINAL) {
-                const bool had_active_power_obis = g_state.power.valid;
-                const uint8_t identity_changes = commit_pending_frame();
-                if (identity_changes != 0) {
-                    auto *snapshot = new (std::nothrow) IdentitySnapshot{};
-                    if (snapshot != nullptr) {
-                        snapshot->endpoint_id = g_state.endpoint_id;
-                        snapshot->meter_id_changed = (identity_changes & 1) != 0;
-                        snapshot->manufacturer_changed = (identity_changes & 2) != 0;
-                        memcpy(snapshot->meter_id, g_state.meter_id.value, sizeof(snapshot->meter_id));
-                        memcpy(snapshot->manufacturer, g_state.manufacturer.value,
-                               sizeof(snapshot->manufacturer));
-                        const CHIP_ERROR error = DeviceLayer::PlatformMgr().ScheduleWork(
-                            publish_meter_identity, reinterpret_cast<intptr_t>(snapshot));
-                        if (error != CHIP_NO_ERROR) {
-                            ESP_LOGE(TAG, "Failed to schedule meter identity update: %" CHIP_ERROR_FORMAT,
-                                     error.Format());
-                            delete snapshot;
-                        }
-                    } else {
-                        ESP_LOGE(TAG, "Out of memory publishing meter identity");
-                    }
+            const auto state = smlState(byte);
+            if (state == SML_VERSION) g_state.pending = {};
+            else if (state == SML_FINAL) {
+                while (smlNextEntry()) handle_list_end();
+                if (!g_state.pending.meter_id.valid && decode_identity_value(g_state.pending.meter_id.value, true)) {
+                    g_state.pending.meter_id.valid = true; g_state.pending.id_rank = 4;
                 }
-                if (!had_active_power_obis && g_state.power.valid) {
-                    // Matter attribute changes must be published from the
-                    // Matter platform work queue, not the UART task.
-                    CHIP_ERROR error = DeviceLayer::PlatformMgr().ScheduleWork(
-                        publish_active_power_obis_seen, 1);
-                    if (error != CHIP_NO_ERROR) {
-                        ESP_LOGE(TAG, "Failed to schedule active-power OBIS diagnostic: %" CHIP_ERROR_FORMAT,
-                                 error.Format());
-                    }
-                }
+                if (g_state.valid_frames != UINT32_MAX) ++g_state.valid_frames;
+                g_state.last_frame_ms = monotonic_ms();
+                commit_pending_frame();
                 notify_sml_frame_received();
                 publish_readings_if_due();
-            } else if (state == SML_CHECKSUM_ERROR) {
+            } else if (state == SML_CHECKSUM_ERROR || state == SML_UNEXPECTED) {
                 g_state.pending = {};
-                ESP_LOGW(TAG, "Discarded SML frame with invalid CRC");
+                auto &counter = state == SML_CHECKSUM_ERROR ? g_state.crc_errors : g_state.decode_errors;
+                if (counter != UINT32_MAX) ++counter;
+                g_state.readings.last_error = state == SML_CHECKSUM_ERROR ? "transport CRC failed" : "malformed or oversized SML frame";
             }
         }
     }
@@ -714,7 +646,7 @@ esp_err_t smart_meter_start(uint16_t matter_endpoint_id, SmartMeterPowerDelegate
     uart_config.source_clk = UART_SCLK_DEFAULT;
 
     const uart_port_t port = static_cast<uart_port_t>(CONFIG_SMARTMETER_UART_NUM);
-    ESP_RETURN_ON_ERROR(uart_driver_install(port, 4096, 0, 0, nullptr, 0), TAG,
+    ESP_RETURN_ON_ERROR(uart_driver_install(port, 8192, 0, 32, &g_uart_events, 0), TAG,
                         "Failed to install UART driver");
     ESP_RETURN_ON_ERROR(uart_param_config(port, &uart_config), TAG, "Failed to configure UART");
     ESP_RETURN_ON_ERROR(uart_set_pin(port, CONFIG_SMARTMETER_UART_TX_GPIO,
@@ -733,6 +665,9 @@ esp_err_t smart_meter_start(uint16_t matter_endpoint_id, SmartMeterPowerDelegate
     ESP_RETURN_ON_FALSE(g_optical_queue != nullptr, ESP_ERR_NO_MEM, TAG,
                         "Failed to create optical queue");
 
+    g_state.readings.power_timeout_ms = CONFIG_SMARTMETER_POWER_FRESHNESS_SECONDS * 1000ULL;
+    g_state.readings.energy_timeout_ms = CONFIG_SMARTMETER_ENERGY_FRESHNESS_SECONDS * 1000ULL;
+    g_state.readings.max_power_mw = CONFIG_SMARTMETER_MAX_POWER_W * 1000LL;
     BaseType_t created = xTaskCreate(smart_meter_task, "sml_reader", 6144, nullptr, 5, nullptr);
     ESP_RETURN_ON_FALSE(created == pdPASS, ESP_ERR_NO_MEM, TAG, "Failed to create SML task");
     created = xTaskCreate(optical_transmitter_task, "optical_tx", 4096, nullptr, 5, nullptr);

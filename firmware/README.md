@@ -14,7 +14,7 @@ over the ESP32-C6's built-in Thread radio.
 - Manufacturer: `SimpleIdeas`
 - Product and commissionable name: `SML over Matter/Thread`
 - Development VID/PID: `0xFFF1` / `0x8000`
-- Software version: `24` (`1.20`)
+- Software version: `25` (`1.21`)
 - Hardware version: `1` (`1.0`)
 - Development serial number: `00000001`
 - ESP-IDF project name: `IR_Meter_Thread_Matter`
@@ -23,7 +23,7 @@ The serial number and test VID/PID are development values. Provision a unique
 serial number and production Matter attestation credentials before producing
 more than one device.
 
-The default data model publishes:
+The preferred OBIS mappings are below; [automatic profiles and fallbacks](../docs/FIRMWARE_1_21.md) extend these mappings.
 
 | OBIS | Meter value | Matter cluster/value |
 | --- | --- | --- |
@@ -31,7 +31,7 @@ The default data model publishes:
 | `1-0:1.8.0*255` | Imported energy | Electrical Energy Measurement / cumulative imported energy, mWh |
 | `1-0:2.8.0*255` | Exported energy | Electrical Energy Measurement / cumulative exported energy, mWh |
 | `1-0:96.1.0*255` | Physical meter ID | Read-only manufacturer-specific diagnostic string |
-| `1-0:96.50.1*1` | Physical meter manufacturer | Read-only manufacturer-specific diagnostic string |
+| `129-129:199.130.3*255` | Physical meter manufacturer | Read-only manufacturer-specific diagnostic string |
 
 Unlike the original Zigbee version, no ioBroker or Zigbee2MQTT converter is
 needed. A Matter controller reads the standard Matter energy clusters.
@@ -138,7 +138,7 @@ setting for a new board. Both choices drive GPIO3 low before configuring
 GPIO14: low for the internal ceramic antenna, high for external U.FL/IPEX,
 following the [official Seeed RF-switch sequence](https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/#hardware-overview).
 
-Firmware `1.20` uses a single **Electrical Meter**
+Firmware `1.21` uses a single **Electrical Meter**
 (`0x0514`) on endpoint 1: power (`0x0090`), energy (`0x0091`), antenna On/Off
 (`0x0006`), PIN input and vendor diagnostics. No second application endpoint,
 On/Off Plug-in Unit, added Electrical Sensor type, label provider or Power
@@ -161,7 +161,7 @@ quickly, and restart. Three short BOOT taps still perform the same action. Neith
 **10-second hold** performs the Matter factory reset.
 The USB console also accepts `antenna internal` or `antenna external`.
 
-The release label is **1.20** and its Matter software version is **24**.
+The firmware label is **1.21** and its Matter software version is **25**.
 Matter orders updates by the numeric version, independently of the display label.
 One universal OTA supports either saved antenna choice. Antenna gestures show
 three quick flashes (80 ms on / 80 ms off) on the onboard status LED before
@@ -270,16 +270,16 @@ repositioning the head or using a dedicated IR LED. Confirm that the display
 changes to PIN entry before trying a real PIN repeatedly, because the meter can
 temporarily block further attempts after too many incorrect entries.
 
-## Extending the OBIS map
+## SML reliability and mapping profiles
 
-Edit `kHandlers` in `main/smart_meter.cpp`. The Matter Electrical Power
-Measurement cluster can also expose voltage, current, frequency, and power
-factor, but each extra measurement requires:
+See [v1.21 reliability details](../docs/FIRMWARE_1_21.md) for validated mappings,
+independent freshness timeouts, diagnostics, and compatibility limits.
 
-1. adding its OBIS and SML unit;
-2. enabling the corresponding optional Matter attribute;
-3. implementing the delegate getter and change notification;
-4. converting to Matter's required base unit, normally mV, mA, mW, or mHz.
+To extend the OBIS map, add an exact identifier and its documented units in
+`smart_meter.cpp`, add selection/validation rules in `meter_readings.h`, and
+exercise the mapping with a complete CRC-valid telegram in the host tests.
+Do not infer a meter model from its manufacturer alone, sum overlapping energy
+registers, or relax CRC/unit checks globally for one meter's quirks.
 
 ## Attribution and licensing
 
