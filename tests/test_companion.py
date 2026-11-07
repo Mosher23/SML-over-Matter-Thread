@@ -246,6 +246,38 @@ class CompanionTests(unittest.IsolatedAsyncioTestCase):
         self.coordinator.data[active._switch_path] = None
         self.assertIsNone(active.native_value)
 
+    def test_meter_id_formats_binary_lgz_and_preserves_raw_value(self):
+        meter_id = sensor.MeterIdSensor(self.runtime)
+        self.assertIsNone(meter_id.native_value)
+        self.assertIsNone(meter_id.extra_state_attributes)
+        raw = "0A014C475A0004D70208"
+        self.coordinator.data = {meter_id._attribute_path: raw}
+        self.assertEqual(meter_id.native_value, "1LGZ0081199624")
+        self.assertEqual(meter_id.extra_state_attributes, {"raw_meter_id": raw})
+        self.assertEqual(self.coordinator.data[meter_id._attribute_path], raw)
+        self.assertEqual(meter_id._attr_unique_id, "5-meter-identity-1")
+        self.coordinator.data[meter_id._attribute_path] = raw.lower().encode("ascii")
+        self.assertEqual(meter_id.native_value, "1LGZ0081199624")
+        self.coordinator.data[meter_id._attribute_path] = "1LGZ0081199624"
+        self.assertEqual(meter_id.native_value, "1LGZ0081199624")
+        self.coordinator.data[meter_id._attribute_path] = None
+        self.assertIsNone(meter_id.native_value)
+        self.assertIsNone(meter_id.extra_state_attributes)
+
+    def test_meter_id_formatting_does_not_change_other_diagnostics(self):
+        manufacturer = sensor.MeterIdentitySensor(
+            self.runtime, const.METER_MANUFACTURER_ATTRIBUTE_ID, "Manufacturer", "factory"
+        )
+        source = sensor.ReliabilitySensor(
+            self.runtime, 22, "Meter ID OBIS source", "code-braces", "text"
+        )
+        self.coordinator.data = {
+            manufacturer._attribute_path: "LGZ",
+            source._attribute_path: "1-0:96.1.0*255",
+        }
+        self.assertEqual(manufacturer.native_value, "LGZ")
+        self.assertEqual(source.native_value, "1-0:96.1.0*255")
+
     async def test_antenna_switch_read_failure_preserves_other_diagnostics(self):
         self.client.read_attribute.side_effect = [
             {"1/4294048769/3": True, "0/40/9": 12, "0/40/10": "1.11"},

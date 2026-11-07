@@ -7,7 +7,7 @@ from homeassistant.helpers.device_registry import DeviceEntryType
 NAME = "SML over Matter/Thread"
 DOMAIN = "smartmeter"
 CONF_DEVICE_ID = "device_id"
-INTEGRATION_VERSION = "2.1.7"
+INTEGRATION_VERSION = "2.1.8"
 PROJECT_URL = "https://github.com/Mosher23/SML-over-Matter-Thread"
 
 

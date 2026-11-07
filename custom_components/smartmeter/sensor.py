@@ -25,6 +25,7 @@ from .const import (
     RELIABILITY_FIELDS,
     companion_device_info,
 )
+from .meter_identity import format_meter_id
 
 
 async def async_setup_entry(
@@ -42,7 +43,7 @@ async def async_setup_entry(
             registry.async_remove(legacy_power_id)
     async_add_entities(
         [
-            MeterIdentitySensor(runtime, METER_ID_ATTRIBUTE_ID, "Meter ID", "identifier"),
+            MeterIdSensor(runtime),
             MeterIdentitySensor(
                 runtime,
                 METER_MANUFACTURER_ATTRIBUTE_ID,
@@ -114,6 +115,22 @@ class MeterIdentitySensor(CoordinatorEntity, SensorEntity):
         if isinstance(value, bytes):
             value = value.decode("ascii", errors="replace")
         return value if isinstance(value, str) and value else None
+
+
+class MeterIdSensor(MeterIdentitySensor):
+    """Show the printed meter ID while retaining the firmware's raw value."""
+
+    def __init__(self, runtime: SmartMeterRuntimeData) -> None:
+        super().__init__(runtime, METER_ID_ATTRIBUTE_ID, "Meter ID", "identifier")
+
+    @property
+    def native_value(self) -> str | None:
+        return format_meter_id(super().native_value)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str] | None:
+        raw = super().native_value
+        return {"raw_meter_id": raw} if raw is not None else None
 
 
 class ReliabilitySensor(MeterIdentitySensor):

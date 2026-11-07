@@ -12,7 +12,7 @@ The optional companion adds diagnostics, optical PIN entry, and GitHub OTA
 updates.
 
 **Latest firmware: [v1.21](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/v1.21).**
-**Latest companion integration: [v2.1.7](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/integration-v2.1.7).**
+**Latest companion integration: [v2.1.8](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/integration-v2.1.8).**
 One universal OTA image supports either antenna. The product and discovery
 name is **SML over Matter/Thread**; controllers may retain an existing name
 until you rename it in their app.
@@ -29,7 +29,7 @@ meter model. See the [supported readings](firmware/README.md#device-identity).
 Firmware **v1.21** adds validated SML decoding, automatic OBIS mapping profiles,
 independent reading ages and stale detection. Power becomes unknown after
 30 seconds without a valid measurement; cumulative energy is retained and
-marked stale after 120 seconds. Companion **2.1.7** provides the diagnostic
+marked stale after 120 seconds. Companion **2.1.8** provides the diagnostic
 entities; advanced status, age and error entities can be enabled when needed.
 See [supported mappings, validation and testing](docs/FIRMWARE_1_21.md).
 
@@ -123,7 +123,7 @@ Do not install HACS separately on Home Assistant 2026.11+.
 | Home Assistant Matter | Native **Energy**, **Power**, and **External antenna** on/off control. |
 | SML over Matter/Thread companion | Seven default diagnostics listed below; **Meter PIN**, **Send PIN**, **Short light pulse**, **Long light pulse**, and **OTA Firmware**. |
 
-Companion **2.1.7** enables only these diagnostics by default:
+Companion **2.1.8** enables only these diagnostics by default:
 
 - **Active antenna**
 - **Imported energy OBIS source**
@@ -139,6 +139,12 @@ Devices & services → Entities** when needed. Source and reliability diagnostic
 require firmware **1.21+**; older firmware keeps its existing companion functions.
 Home Assistant preserves existing entity preferences during an update, so
 already-enabled diagnostics keep their current settings until you change them.
+
+Companion **2.1.8** displays recognized binary meter IDs in
+their printed format (for example, `1LGZ0081199624`). The **Meter ID** sensor's
+`raw_meter_id` attribute retains the original value. This presentation change
+requires only an integration update; firmware **1.21** can remain installed.
+See the [integration update notes](docs/INTEGRATION_2_1_8.md).
 
 The companion is registered as a software service: its Device info card shows
 **Version**, while the separate Matter device shows its actual **Firmware**.
@@ -203,7 +209,7 @@ screen unless you intend to clear those values.
 
 Update the HA companion through **Settings → Updates** (Marketplace) first,
 restart Home Assistant when prompted, then open the companion’s **OTA Firmware**
-entity. Companion **2.1.7** uses Matter's numeric version
+entity. Companion **2.1.8** uses Matter's numeric version
 order when determining which firmware updates are available.
 Refresh **OTA Firmware** to check immediately. The repository is now
 `Mosher23/SML-over-Matter-Thread`; use that URL with Marketplace’s **Add from link**.
