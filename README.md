@@ -1,8 +1,10 @@
 <p align="center">
-  <img src="custom_components/smartmeter/brand/icon@2x.png" alt="SML over Matter/Thread integration logo" width="180" height="180">
+  <img src="custom_components/smartmeter/brand/icon@2x.png" alt="SML Meter integration logo" width="180" height="180">
 </p>
 
-# ⚡ SML over Matter/Thread
+# ⚡ SML Meter
+
+SML electricity readings over Matter and Thread.
 
 Read an electricity meter's **SML data through its infrared interface** using
 a Seeed XIAO ESP32-C6, and send the readings over **Matter/Thread**. Home
@@ -12,8 +14,8 @@ The optional companion adds diagnostics, optical PIN entry, and GitHub OTA
 updates.
 
 **Latest firmware: [v1.21](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/v1.21).**
-**Latest companion integration: [v2.1.8](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/integration-v2.1.8).**
-One universal OTA image supports either antenna. The product and discovery
+**Latest companion integration: [v2.1.9](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/integration-v2.1.9).**
+One universal OTA image supports either antenna. The firmware product and discovery
 name is **SML over Matter/Thread**; controllers may retain an existing name
 until you rename it in their app.
 
@@ -23,6 +25,14 @@ meter model. See the [supported readings](firmware/README.md#device-identity).
 
 > This is a development project, not a certified Matter product. It uses a
 > test certificate, development vendor ID, and sample serial number.
+
+## SML Meter 2.1.9
+
+The Home Assistant companion is now **SML Meter**. Existing default integration
+and companion device names update automatically; custom names, entity IDs,
+and Matter pairings are preserved. This release also packages the English setup
+translation and adds complete Marketplace validation. Firmware v1.21 can remain
+installed. See the [integration release notes](docs/INTEGRATION_2_1_9.md).
 
 ## 🔎 Firmware 1.21 reliability
 
@@ -103,11 +113,11 @@ To add the repository manually:
 2. Enter `https://github.com/Mosher23/SML-over-Matter-Thread` and select **Add**.
    Complete the GitHub connection if requested. Choose **Integration** if asked
    for the content type.
-3. Open **SML over Matter/Thread** and select **Install**. Companion releases
+3. Open **SML Meter** and select **Install**. Companion releases
    use `integration-v…` tags; XIAO firmware releases use `v…` tags.
 4. Follow the integration setup flow and select your existing Matter device.
    If setup does not open, use **Settings → Devices & services → Add integration
-   → SML over Matter/Thread**. Restart only if Home Assistant asks you to.
+   → SML Meter**. Restart only if Home Assistant asks you to.
 
 Marketplace installs the HA companion. Flash the XIAO firmware separately over
 USB or with **OTA Firmware**. Companion updates appear under **Settings →
@@ -121,7 +131,7 @@ Do not install HACS separately on Home Assistant 2026.11+.
 | Integration | Entities and controls |
 | --- | --- |
 | Home Assistant Matter | Native **Energy**, **Power**, and **External antenna** on/off control. |
-| SML over Matter/Thread companion | Seven default diagnostics listed below; **Meter PIN**, **Send PIN**, **Short light pulse**, **Long light pulse**, and **OTA Firmware**. |
+| SML Meter companion | Seven default diagnostics listed below; **Meter PIN**, **Send PIN**, **Short light pulse**, **Long light pulse**, and **OTA Firmware**. |
 
 Companion **2.1.8** enables only these diagnostics by default:
 

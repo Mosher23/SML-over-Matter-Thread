@@ -1,11 +1,18 @@
 {
   "domain": "smartmeter",
-  "name": "SML over Matter/Thread",
-  "version": "2.1.8",
-  "codeowners": ["@Mosher23"],
+  "name": "SML Meter",
+  "categories": [
+    "energy.meters_monitoring"
+  ],
+  "codeowners": [
+    "@Mosher23"
+  ],
   "config_flow": true,
-  "dependencies": ["matter"],
+  "dependencies": [
+    "matter"
+  ],
   "documentation": "https://github.com/Mosher23/SML-over-Matter-Thread",
+  "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Mosher23/SML-over-Matter-Thread/issues",
-  "iot_class": "cloud_polling"
+  "version": "2.1.9"
 }

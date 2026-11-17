@@ -16,6 +16,7 @@ from .const import (
     EXTERNAL_ANTENNA_ATTRIBUTE_ID,
     METER_ID_ATTRIBUTE_ID,
     METER_MANUFACTURER_ATTRIBUTE_ID,
+    NAME,
     ON_OFF_ATTRIBUTE_ID,
     ON_OFF_CLUSTER_ID,
     RELIABILITY_FIELDS,
@@ -33,7 +34,7 @@ class SmartMeterCoordinator(DataUpdateCoordinator[dict[str, object]]):
         super().__init__(
             hass,
             _LOGGER,
-            name=f"SML over Matter/Thread {node_id}",
+            name=f"{NAME} {node_id}",
             update_interval=POLL_INTERVAL,
         )
         self.matter_client = matter_client

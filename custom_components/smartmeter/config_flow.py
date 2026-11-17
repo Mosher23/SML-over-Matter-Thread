@@ -1,4 +1,4 @@
-"""Configuration flow for the SML over Matter/Thread integration."""
+"""Configuration flow for the SML Meter integration."""
 
 from __future__ import annotations
 

@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SML Meter",
+        "description": "SML electricity readings over Matter and Thread.\n\nChoose the existing Matter smart-meter device.",
+        "data": {
+          "device_id": "Matter smart meter"
+        }
+      }
+    },
+    "error": {
+      "not_supported": "The selected Matter device does not support Smart Meter PIN entry. Flash firmware v1.4 or later first."
+    },
+    "abort": {
+      "already_configured": "This Matter meter is already configured."
+    }
+  }
+}

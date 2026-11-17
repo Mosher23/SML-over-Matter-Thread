@@ -1,13 +1,13 @@
-"""Constants for the SML over Matter/Thread integration."""
+"""Constants for the SML Meter integration."""
 
 from __future__ import annotations
 
 from homeassistant.helpers.device_registry import DeviceEntryType
 
-NAME = "SML over Matter/Thread"
+NAME = "SML Meter"
 DOMAIN = "smartmeter"
 CONF_DEVICE_ID = "device_id"
-INTEGRATION_VERSION = "2.1.8"
+INTEGRATION_VERSION = "2.1.9"
 PROJECT_URL = "https://github.com/Mosher23/SML-over-Matter-Thread"
 
 
@@ -26,7 +26,7 @@ def companion_device_info(device_id: str) -> dict:
 
 def normalize_legacy_name(name: str | None) -> str | None:
     """Update default project names while preserving custom names."""
-    if name in {"IR Smart Meter", "IR Smart Meter PIN"}:
+    if name in {"IR Smart Meter", "IR Smart Meter PIN", "SML over Matter/Thread"}:
         return NAME
     if name == "Smart Meter PIN":
         return "Smart Meter"

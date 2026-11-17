@@ -1,4 +1,4 @@
-"""SML over Matter/Thread custom integration."""
+"""SML Meter custom integration."""
 
 from __future__ import annotations
 

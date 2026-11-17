@@ -147,6 +147,7 @@ class CompanionTests(unittest.IsolatedAsyncioTestCase):
     def test_old_default_names_use_project_name_and_preserve_custom_names(self):
         self.assertEqual(const.normalize_legacy_name("IR Smart Meter PIN"), const.NAME)
         self.assertEqual(const.normalize_legacy_name("IR Smart Meter"), const.NAME)
+        self.assertEqual(const.normalize_legacy_name("SML over Matter/Thread"), const.NAME)
         self.assertEqual(const.normalize_legacy_name(const.NAME), const.NAME)
         self.assertIsNone(const.normalize_legacy_name(None))
         self.assertEqual(const.normalize_legacy_name("Smart Meter PIN"), "Smart Meter")
