@@ -6,6 +6,7 @@ import asyncio
 from datetime import timedelta
 import json
 import logging
+import re
 from urllib.parse import urljoin, urlsplit
 
 from aiohttp import ClientTimeout
@@ -55,6 +56,42 @@ async def _download(session, url: str, limit: int, *, missing_ok=False):
 
 async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities([GitHubFirmwareUpdate(entry.runtime_data)], update_before_add=True)
+
+
+async def _firmware_release(session):
+    """Keep firmware discovery working when GitHub Latest is the companion."""
+    api = f"https://api.github.com/repos/{REPOSITORY}/releases"
+    raw = await _download(session, f"{api}/latest", MAX_JSON, missing_ok=True)
+    if raw is None:
+        return None
+    release = json.loads(raw)
+    if not isinstance(release, dict):
+        raise ValueError("Invalid GitHub release response")
+    if release.get("draft") or release.get("prerelease"):
+        raise ValueError("Only stable published releases are supported")
+    if not str(release.get("tag_name", "")).startswith("integration-v"):
+        return release
+
+    # Each response keeps the existing JSON size/time limits. Bound history
+    # traversal to 50 releases; never scan indefinitely during entity setup.
+    for page in range(1, 11):
+        raw = await _download(session, f"{api}?per_page=5&page={page}", MAX_JSON)
+        releases = json.loads(raw)
+        if not isinstance(releases, list):
+            raise ValueError("Invalid GitHub release list")
+        for candidate in releases:
+            if not isinstance(candidate, dict):
+                raise ValueError("Invalid GitHub release entry")
+            if candidate.get("draft") or candidate.get("prerelease"):
+                continue
+            tag = candidate.get("tag_name")
+            if isinstance(tag, str) and re.fullmatch(r"v[0-9]+\.[0-9]+(?:\.[0-9]+)?", tag):
+                # Validate this release's manifest below. An incomplete newest
+                # firmware release must not silently select older firmware.
+                return candidate
+        if len(releases) < 5:
+            return None
+    raise ValueError("No stable firmware found in the 50 most recent releases")
 
 
 class GitHubFirmwareUpdate(UpdateEntity):
@@ -154,13 +191,11 @@ class GitHubFirmwareUpdate(UpdateEntity):
             return
         try:
             session = async_get_clientsession(self.hass)
-            raw = await _download(session, f"https://api.github.com/repos/{REPOSITORY}/releases/latest",
-                                  MAX_JSON, missing_ok=True)
+            release = await _firmware_release(session)
             self._release = None
-            if raw is None:
+            if release is None:
                 self._phase = "No published firmware release"
             else:
-                release = json.loads(raw)
                 if release.get("draft") or release.get("prerelease"):
                     raise ValueError("Only stable published releases are supported")
                 tag = release["tag_name"]

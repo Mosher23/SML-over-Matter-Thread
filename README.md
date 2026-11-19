@@ -14,7 +14,7 @@ The optional companion adds diagnostics, optical PIN entry, and GitHub OTA
 updates.
 
 **Latest firmware: [v1.21](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/v1.21).**
-**Latest companion integration: [v2.1.9](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/integration-v2.1.9).**
+**Latest companion integration: [v2.1.10](https://github.com/Mosher23/SML-over-Matter-Thread/releases/tag/integration-v2.1.10).**
 One universal OTA image supports either antenna. The firmware product and discovery
 name is **SML over Matter/Thread**; controllers may retain an existing name
 until you rename it in their app.
@@ -25,6 +25,16 @@ meter model. See the [supported readings](firmware/README.md#device-identity).
 
 > This is a development project, not a certified Matter product. It uses a
 > test certificate, development vendor ID, and sample serial number.
+
+## SML Meter 2.1.10
+
+The release includes the English setup fallback at
+`custom_components/smartmeter/translations/en.json` and runs the official
+hassfest action in its own workflow. GitHub's **Latest** release now points to
+the companion integration; firmware checks find stable firmware separately.
+Update older companions to 2.1.10 to keep **OTA Firmware** checks working with
+this release layout. Firmware v1.21 remains compatible.
+See the [integration release notes](docs/INTEGRATION_2_1_10.md).
 
 ## SML Meter 2.1.9
 

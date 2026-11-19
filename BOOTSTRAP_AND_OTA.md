@@ -100,7 +100,11 @@ After flashing and commissioning the meter, use
 4. Allow time for the transfer, reboot, and health check. Confirm the new
    firmware version on the Matter device afterward.
 
-The companion checks the latest **stable** GitHub release every six hours.
+The companion checks for **stable firmware** every six hours. From companion
+2.1.10, a GitHub Latest release tagged `integration-v…` triggers a bounded
+search through recent stable firmware releases tagged `v…`; drafts, prereleases,
+and companion releases are excluded. The selected firmware still needs its
+validated `ota-manifest.json`.
 To check sooner, use HA's **Update entity** action on **OTA Firmware**.
 Before transfer, the integration validates the release manifest, SHA-256,
 Matter OTA header, and embedded application version. If it fails, inspect
@@ -148,3 +152,23 @@ This development release trusts the GitHub repository and checksums; it is
 not a production signed-firmware chain. Production devices need unique
 serial numbers, production Matter attestation, signed images, and secure
 boot.
+
+## Publishing companion integration releases
+
+Keep the companion integration as GitHub's **Latest** release so Marketplace
+reviewers and the catalog receive the integration's current source archive.
+Publish firmware releases without moving that flag. Companion 2.1.10 and later
+find firmware independently when Latest is an integration release; older
+companions need updating to continue firmware update checks in this layout.
+
+Before publishing an `integration-v…` release:
+
+1. Match the manifest version and `INTEGRATION_VERSION` to the release version.
+2. Include `custom_components/smartmeter/translations/en.json`, with the complete
+   contents of `strings.json`, in the committed tree and source archive.
+3. Wait for both the HACS and standalone hassfest workflows to pass for that
+   exact commit, along with the companion tests.
+4. Publish the full GitHub release and mark it Latest. Download its source
+   archive and verify the English fallback and hassfest workflow are present.
+5. Link the release and passing runs in the catalog submission before marking
+   it ready for review again.

@@ -68,6 +68,11 @@ def release_response():
     ]}).encode()
 
 
+def companion_release():
+    return {"tag_name": "integration-v2.1.10", "draft": False,
+            "prerelease": False, "assets": []}
+
+
 class UpdateTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.attrs = ready_attributes()
@@ -117,6 +122,84 @@ class UpdateTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.entity.latest_version, "1.8")
         self.client.upload_ota_file.assert_not_awaited()
         self.client.update_node.assert_not_awaited()
+
+    async def test_companion_latest_selects_only_stable_firmware(self):
+        firmware = json.loads(release_response())
+        releases = [companion_release(), dict(firmware, draft=True),
+                    dict(firmware, prerelease=True), firmware]
+        with patch.object(update, "_download", AsyncMock(side_effect=[
+                json.dumps(companion_release()).encode(), json.dumps(releases).encode(),
+                json.dumps(manifest_fixture()).encode()])) as download:
+            await self.entity.async_update()
+        self.assertEqual(self.entity.latest_version, "1.8")
+        self.assertEqual(self.entity._release.tag, "v1.8")
+        self.assertIsNone(self.entity.extra_state_attributes["last_error"])
+        self.assertIn("releases?per_page=5&page=1", download.await_args_list[1].args[1])
+        self.client.upload_ota_file.assert_not_awaited()
+        self.client.update_node.assert_not_awaited()
+
+    async def test_firmware_history_continues_past_companion_only_page(self):
+        with patch.object(update, "_download", AsyncMock(side_effect=[
+                json.dumps(companion_release()).encode(),
+                json.dumps([companion_release()] * 5).encode(),
+                json.dumps([json.loads(release_response())]).encode(),
+                json.dumps(manifest_fixture()).encode()])) as download:
+            await self.entity.async_update()
+        self.assertEqual(self.entity.latest_version, "1.8")
+        self.assertIn("page=2", download.await_args_list[2].args[1])
+
+    async def test_companion_only_repository_has_no_firmware_update(self):
+        with patch.object(update, "_download", AsyncMock(side_effect=[
+                json.dumps(companion_release()).encode(),
+                json.dumps([companion_release()]).encode()])):
+            await self.entity.async_update()
+        self.assertIsNone(self.entity._release)
+        self.assertEqual(self.entity.latest_version, self.entity.installed_version)
+        self.assertIsNone(self.entity.extra_state_attributes["last_error"])
+        self.assertEqual(self.entity._phase, "No published firmware release")
+        self.client.upload_ota_file.assert_not_awaited()
+
+    async def test_incomplete_newest_firmware_does_not_select_older_release(self):
+        incomplete = dict(json.loads(release_response()), tag_name="v1.9", assets=[])
+        with patch.object(update, "_download", AsyncMock(side_effect=[
+                json.dumps(companion_release()).encode(),
+                json.dumps([incomplete, json.loads(release_response())]).encode()])) as download:
+            await self.entity.async_update()
+        self.assertIsNone(self.entity._release)
+        self.assertIn("missing ota-manifest.json", self.entity.extra_state_attributes["last_error"])
+        self.assertEqual(download.await_count, 2)
+        self.client.upload_ota_file.assert_not_awaited()
+        self.client.update_node.assert_not_awaited()
+
+    async def test_invalid_firmware_history_is_reported(self):
+        for payload in ({"message": "rate limited"}, [None]):
+            with self.subTest(payload=payload), patch.object(update, "_download", AsyncMock(side_effect=[
+                    json.dumps(companion_release()).encode(), json.dumps(payload).encode()])):
+                await self.entity.async_update()
+            self.assertIsNone(self.entity._release)
+            self.assertIsNone(self.entity.latest_version)
+            self.assertIn("Invalid GitHub release", self.entity.extra_state_attributes["last_error"])
+
+    async def test_firmware_history_search_is_bounded(self):
+        page = json.dumps([companion_release()] * 5).encode()
+        with patch.object(update, "_download", AsyncMock(side_effect=[
+                json.dumps(companion_release()).encode(), *([page] * 10)])) as download:
+            await self.entity.async_update()
+        self.assertEqual(download.await_count, 11)
+        self.assertIsNone(self.entity._release)
+        self.assertIn("50 most recent releases", self.entity.extra_state_attributes["last_error"])
+        self.client.upload_ota_file.assert_not_awaited()
+
+    async def test_install_with_companion_latest_still_verifies_firmware_version(self):
+        with patch.object(update, "_download", AsyncMock(side_effect=[
+                json.dumps(companion_release()).encode(),
+                json.dumps([companion_release(), json.loads(release_response())]).encode(),
+                json.dumps(manifest_fixture()).encode(), image_fixture()])), \
+                patch.object(update.asyncio, "sleep", AsyncMock()):
+            await self.entity.async_install()
+        self.client.upload_ota_file.assert_awaited_once()
+        self.client.update_node.assert_awaited_once_with(5, 9)
+        self.assertEqual(self.entity._phase, "Installed version verified after reboot")
 
     async def test_usb_only_release_has_no_install_action(self):
         manifest = {"schema": 1, "delivery": "usb", "vendor_id": 0xFFF1,
